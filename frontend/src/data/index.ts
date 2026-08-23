@@ -355,6 +355,8 @@ export type Task = {
   start: string;
   due: string;
   points: number;
+  weight?: number;
+  approvedProgress?: number;
   comments: number;
   subtasks: { total: number; done: number };
 };
@@ -390,8 +392,10 @@ const projectSeeds = [
 ];
 
 export const projects: Project[] = projectSeeds.map((p, i) => {
-  const memberCount = 3 + (i % 4);
-  const members = Array.from({ length: memberCount }, (_, j) => getTeamMember(i + j));
+  // The workspace roster must include the full team. Project-specific roles
+  // (manager, lead, observer, member) are supplied by project memberships
+  // when the API is available.
+  const members = team;
   const total = 18 + ((i * 7) % 22);
   const done = Math.round((total * p.progress) / 100);
   return {

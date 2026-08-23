@@ -81,6 +81,34 @@ const PROJECT_STATUSES: ProjectStatus[] = [
   "Completed",
 ];
 
+const API_PROJECT_STATUS: Record<string, ProjectStatus> = {
+  planning: "On Track",
+  active: "On Track",
+  on_hold: "At Risk",
+  completed: "Completed",
+};
+
+type ApiMembership = {
+  user: number;
+  user_name: string;
+  user_email: string;
+  role: string;
+};
+
+function toProjectMember(membership: ApiMembership): TeamMember {
+  const knownMember = team.find((member) => member.name === membership.user_name);
+  return {
+    id: String(membership.user),
+    name: membership.user_name,
+    email: membership.user_email,
+    role: membership.role,
+    department: knownMember?.department ?? "Project",
+    avatar: knownMember?.avatar ?? "",
+    status: knownMember?.status ?? "Active",
+    location: knownMember?.location ?? "",
+  };
+}
+
 const FILTERS: Array<{ value: string; label: string }> = [
   { value: "all", label: "All" },
   { value: "On Track", label: "On Track" },
@@ -539,6 +567,55 @@ export default function ProjectsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
   const idRef = useRef(900);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProjectProgress() {
+      try {
+        const response = await fetch("/api/projects", { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Could not load projects.");
+        const apiProjects = Array.isArray(data) ? data : data.results || [];
+        const membershipEntries = await Promise.all(apiProjects.map(async (apiProject: { id: number }) => {
+          const membersResponse = await fetch(`/api/project-memberships?project=${apiProject.id}`, { cache: "no-store" });
+          const membersData = await membersResponse.json();
+          if (!membersResponse.ok) throw new Error(membersData.detail || "Could not load project members.");
+          const memberships = Array.isArray(membersData) ? membersData : membersData.results || [];
+          return [apiProject.id, memberships as ApiMembership[]] as const;
+        }));
+        const membershipsByProject = new Map(membershipEntries);
+        if (cancelled) return;
+
+        setItems((current) => current.map((project) => {
+          const apiProject = apiProjects.find((item: { name: string }) => item.name === project.name);
+          if (!apiProject) return project;
+          const members = (membershipsByProject.get(apiProject.id) ?? []).map(toProjectMember);
+          const lead = members.find((member) => member.role === "lead")
+            ?? members.find((member) => member.role === "manager")
+            ?? project.lead;
+          return {
+            ...project,
+            progress: apiProject.progress,
+            status: API_PROJECT_STATUS[apiProject.status] ?? project.status,
+            taskCounts: {
+              total: apiProject.task_count,
+              done: apiProject.completed_task_count,
+            },
+            lead,
+            members: members.length ? members : project.members,
+          };
+        }));
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Could not load projects.");
+        }
+      }
+    }
+
+    void loadProjectProgress();
+    return () => { cancelled = true; };
+  }, []);
 
   function createProject(input: NewProjectInput) {
     const lead = team.find((m) => m.id === input.leadId) ?? team[0];

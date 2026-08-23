@@ -45,7 +45,6 @@ import {
 } from "@/data";
 import {
   ProjectWorkspace,
-  buildTasks,
   type TaskActions,
 } from "./project-workspace";
 
@@ -64,8 +63,26 @@ const TASK_STATUSES: TaskStatus[] = [
   "Done",
 ];
 const TASK_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Urgent"];
-const POINT_OPTIONS = [1, 2, 3, 5, 8];
 const MS_DAY = 86_400_000;
+
+const API_TASK_STATUS: Record<TaskStatus, "todo" | "in_progress" | "done"> = {
+  Backlog: "todo",
+  Todo: "todo",
+  "In Progress": "in_progress",
+  "In Review": "in_progress",
+  Done: "done",
+};
+
+const WORKSPACE_TASK_STATUS: Record<string, TaskStatus> = {
+  todo: "Todo",
+  in_progress: "In Progress",
+  done: "Done",
+};
+
+function getBackendProjectId(projectId: string) {
+  const match = /^PRJ-(\d+)$/.exec(projectId);
+  return match ? Number(match[1]) - 100 : null;
+}
 
 function initials(name: string) {
   return name
@@ -92,27 +109,35 @@ type NewTaskInput = {
   status: TaskStatus;
   priority: TaskPriority;
   assigneeId: string;
-  points: number;
+  weight: number;
+  progress: number;
+  startDate: string;
+  endDate: string;
 };
 
 function AddTaskDialog({
   open,
   onOpenChange,
   defaultStatus,
+  statusLocked,
   roster,
   onCreate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultStatus: TaskStatus;
+  statusLocked: boolean;
   roster: TeamMember[];
   onCreate: (input: NewTaskInput) => void;
 }) {
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [priority, setPriority] = useState<TaskPriority>("Medium");
-  const [assigneeId, setAssigneeId] = useState(roster[0]?.id ?? "");
-  const [points, setPoints] = useState(3);
+  const [assigneeId, setAssigneeId] = useState("unassigned");
+  const [weight, setWeight] = useState(1);
+  const [progress, setProgress] = useState(0);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   // Reset the form each time the dialog opens, honouring the source column.
   useEffect(() => {
@@ -120,8 +145,11 @@ function AddTaskDialog({
       setTitle("");
       setStatus(defaultStatus);
       setPriority("Medium");
-      setAssigneeId(roster[0]?.id ?? "");
-      setPoints(3);
+      setAssigneeId("unassigned");
+      setWeight(1);
+      setProgress(0);
+      setStartDate("");
+      setEndDate("");
     }
   }, [open, defaultStatus, roster]);
 
@@ -131,7 +159,19 @@ function AddTaskDialog({
       toast.error("Task title is required");
       return;
     }
-    onCreate({ title: title.trim(), status, priority, assigneeId, points });
+    if (startDate && endDate && endDate < startDate) {
+      toast.error("End date must be on or after the start date.");
+      return;
+    }
+    if (!Number.isInteger(weight) || weight < 1 || weight > 100) {
+      toast.error("Task weight must be between 1% and 100%.");
+      return;
+    }
+    if (!Number.isInteger(progress) || progress < 0 || progress > 100) {
+      toast.error("Task progress must be between 0% and 100%.");
+      return;
+    }
+    onCreate({ title: title.trim(), status, priority, assigneeId, weight, progress, startDate, endDate });
     onOpenChange(false);
   }
 
@@ -160,10 +200,21 @@ function AddTaskDialog({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
+                <Label htmlFor="task-start-date">Start date</Label>
+                <Input id="task-start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="task-end-date">End date</Label>
+                <Input id="task-end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </div>
+
+              <div className="grid gap-2">
                 <Label htmlFor="task-status">Status</Label>
                 <Select
                   value={status}
                   onValueChange={(v) => setStatus(v as TaskStatus)}
+                  disabled={statusLocked}
                 >
                   <SelectTrigger id="task-status">
                     <SelectValue />
@@ -204,6 +255,7 @@ function AddTaskDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
                     {roster.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
                         {m.name}
@@ -214,22 +266,30 @@ function AddTaskDialog({
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="task-points">Story points</Label>
-                <Select
-                  value={String(points)}
-                  onValueChange={(v) => setPoints(Number(v))}
-                >
-                  <SelectTrigger id="task-points">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {POINT_OPTIONS.map((p) => (
-                      <SelectItem key={p} value={String(p)}>
-                        {p} {p === 1 ? "point" : "points"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="task-weight">Project weight (%)</Label>
+                <Input
+                  id="task-weight"
+                  type="number"
+                  min="1"
+                  max="100"
+                  step="1"
+                  value={weight}
+                  onChange={(event) => setWeight(Number(event.target.value))}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="task-progress">Task progress (%)</Label>
+                <Input
+                  id="task-progress"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={progress}
+                  onChange={(event) => setProgress(Number(event.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">Applied to the project after observer approval.</p>
               </div>
             </div>
           </div>
@@ -255,28 +315,150 @@ function AddTaskDialog({
 // ---------------------------------------------------------------------------
 
 export function ProjectDetail({ project }: { project: Project }) {
-  const roster = [
-    project.lead,
-    ...project.members.filter((m) => m.id !== project.lead.id),
-  ];
-
-  const [tasks, setTasks] = useState<Task[]>(() => buildTasks(project));
+  const [roster, setRoster] = useState<TeamMember[]>([]);
+  const [membersLoaded, setMembersLoaded] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projectProgress, setProjectProgress] = useState(project.progress);
+  const [projectTaskCounts, setProjectTaskCounts] = useState(project.taskCounts);
   const idRef = useRef(1000);
 
   const [starred, setStarred] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addStatus, setAddStatus] = useState<TaskStatus>("Todo");
+  const [addStatusLocked, setAddStatusLocked] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
 
-  function openAddTask(status: TaskStatus) {
+  useEffect(() => {
+    const backendProjectId = getBackendProjectId(project.id);
+    if (!backendProjectId) return;
+    let cancelled = false;
+
+    async function loadProjectTeamAndTasks() {
+      setMembersLoaded(false);
+      try {
+        const [membersResponse, tasksResponse, projectResponse] = await Promise.all([
+          fetch(`/api/project-memberships?project=${backendProjectId}`, { cache: "no-store" }),
+          fetch(`/api/tasks?project=${backendProjectId}`, { cache: "no-store" }),
+          fetch(`/api/projects/${backendProjectId}`, { cache: "no-store" }),
+        ]);
+        const [membersData, tasksData, projectData] = await Promise.all([
+          membersResponse.json(),
+          tasksResponse.json(),
+          projectResponse.json(),
+        ]);
+        if (!membersResponse.ok) throw new Error(membersData.detail || "Could not load project members.");
+        if (!tasksResponse.ok) throw new Error(tasksData.detail || "Could not load tasks.");
+        if (!projectResponse.ok) throw new Error(projectData.detail || "Could not load project progress.");
+
+        const memberships = Array.isArray(membersData) ? membersData : membersData.results || [];
+        const members: TeamMember[] = memberships.map((item: { user: number; user_name: string; user_email: string; role: string }) => ({
+          id: String(item.user),
+          name: item.user_name,
+          role: item.role,
+          department: "Project",
+          email: item.user_email,
+          avatar: "",
+          status: "Active",
+          location: "",
+        }));
+        const items = Array.isArray(tasksData) ? tasksData : tasksData.results || [];
+        if (cancelled) return;
+
+        setRoster(members);
+        setTasks(items.map((item: { id: number; title: string; status: string; assignee: number | null; start_date: string | null; end_date: string | null; weight: number; approved_progress: number }) => ({
+          id: `${project.key}-${item.id}`,
+          title: item.title,
+          status: WORKSPACE_TASK_STATUS[item.status] || "Todo",
+          priority: "Medium",
+          assignee: members.find((member) => member.id === String(item.assignee)) ?? {
+            id: `unassigned-${item.id}`,
+            name: "Unassigned",
+            role: "",
+            department: "",
+            email: "",
+            avatar: "",
+            status: "Offline",
+            location: "",
+          },
+          labels: [],
+          projectId: project.id,
+          start: item.start_date || project.start,
+          due: item.end_date || project.due,
+          points: 3,
+          weight: item.weight,
+          approvedProgress: item.approved_progress,
+          comments: 0,
+          subtasks: { total: 0, done: 0 },
+        })));
+        setProjectProgress(projectData.progress);
+        setProjectTaskCounts({
+          total: projectData.task_count,
+          done: projectData.completed_task_count,
+        });
+        setMembersLoaded(true);
+      } catch (error) {
+        if (!cancelled) {
+          setMembersLoaded(true);
+          toast.error(error instanceof Error ? error.message : "Could not load project data.");
+        }
+      }
+    }
+
+    void loadProjectTeamAndTasks();
+    return () => {
+      cancelled = true;
+    };
+  }, [project]);
+
+  function openAddTask(status: TaskStatus, statusLocked = false) {
+    if (!membersLoaded) {
+      toast.info("Loading project members. Please try again in a moment.");
+      return;
+    }
     setAddStatus(status);
+    setAddStatusLocked(statusLocked);
     setAddOpen(true);
   }
 
-  function createTask(input: NewTaskInput) {
+  async function createTask(input: NewTaskInput) {
+    const backendProjectId = getBackendProjectId(project.id);
+    if (!backendProjectId) {
+      toast.error("This project is not connected to the API.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project: backendProjectId,
+          title: input.title,
+          status: API_TASK_STATUS[input.status],
+          assignee: input.assigneeId === "unassigned" ? null : Number(input.assigneeId),
+          weight: input.weight,
+          initial_progress: input.progress,
+          start_date: input.startDate || null,
+          end_date: input.endDate || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(typeof data.detail === "string" ? data.detail : "Could not create task.");
+      }
+
     const assignee =
-      roster.find((m) => m.id === input.assigneeId) ?? project.lead;
-    const id = `${project.key}-${idRef.current++}`;
+      roster.find((m) => m.id === input.assigneeId) ?? {
+        id: "unassigned-new-task",
+        name: "Unassigned",
+        role: "",
+        department: "",
+        email: "",
+        avatar: "",
+        status: "Offline" as const,
+        location: "",
+      };
+    const id = `${project.key}-${data.id ?? idRef.current++}`;
     const now = Date.now();
     const task: Task = {
       id,
@@ -286,9 +468,10 @@ export function ProjectDetail({ project }: { project: Project }) {
       assignee,
       labels: [],
       projectId: project.id,
-      start: new Date(now).toISOString().slice(0, 10),
-      due: new Date(now + 7 * MS_DAY).toISOString().slice(0, 10),
-      points: input.points,
+      start: input.startDate || new Date(now).toISOString().slice(0, 10),
+      due: input.endDate || new Date(now + 7 * MS_DAY).toISOString().slice(0, 10),
+      points: 0,
+      weight: input.weight,
       comments: 0,
       subtasks: { total: 0, done: 0 },
     };
@@ -296,6 +479,9 @@ export function ProjectDetail({ project }: { project: Project }) {
     toast.success("Task created", {
       description: `${id} · ${input.title} → ${input.status}`,
     });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create task.");
+    }
   }
 
   const actions: TaskActions = {
@@ -314,6 +500,11 @@ export function ProjectDetail({ project }: { project: Project }) {
 
   const shown = roster.slice(0, 5);
   const extra = roster.length - shown.length;
+  const projectWithProgress = {
+    ...project,
+    progress: projectProgress,
+    taskCounts: projectTaskCounts,
+  };
 
   return (
     <div className="space-y-6">
@@ -430,7 +621,7 @@ export function ProjectDetail({ project }: { project: Project }) {
               <IconSettings className="size-4" />
               <span className="sr-only">Project settings</span>
             </Button>
-            <Button onClick={() => openAddTask("Todo")}>
+            <Button onClick={() => openAddTask("Todo")} disabled={!membersLoaded}>
               <IconPlus className="size-4" /> New task
             </Button>
           </div>
@@ -439,13 +630,13 @@ export function ProjectDetail({ project }: { project: Project }) {
         {/* Progress strip */}
         <div className="flex items-center gap-4 rounded-xl border bg-card px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <span className="tabular-nums">{project.progress}%</span>
+            <span className="tabular-nums">{projectWithProgress.progress}%</span>
             <span className="text-muted-foreground">complete</span>
           </div>
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${project.progress}%` }}
+              style={{ width: `${projectWithProgress.progress}%` }}
             />
           </div>
           <span
@@ -458,16 +649,18 @@ export function ProjectDetail({ project }: { project: Project }) {
       </div>
 
       <ProjectWorkspace
-        project={project}
+        project={projectWithProgress}
         tasks={tasks}
+        members={roster}
         actions={actions}
-        onAddTask={openAddTask}
+        onAddTask={(status) => openAddTask(status, true)}
       />
 
       <AddTaskDialog
         open={addOpen}
         onOpenChange={setAddOpen}
         defaultStatus={addStatus}
+        statusLocked={addStatusLocked}
         roster={roster}
         onCreate={createTask}
       />

@@ -374,8 +374,8 @@ function BoardCard({ task, actions }: { task: Task; actions: TaskActions }) {
           </span>
         </span>
         <div className="flex items-center gap-1">
-          <span className="flex size-5 items-center justify-center rounded bg-muted text-[10px] font-medium tabular-nums text-muted-foreground">
-            {task.points}
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+            {task.weight ?? 0}% weight
           </span>
           <TaskMenu task={task} actions={actions} />
         </div>
@@ -384,6 +384,14 @@ function BoardCard({ task, actions }: { task: Task; actions: TaskActions }) {
       <p className="text-sm font-medium leading-snug">{task.title}</p>
 
       <TaskLabels labels={task.labels} />
+
+      <div className="space-y-1">
+        <div className="flex justify-between text-[11px] text-muted-foreground">
+          <span>Progress</span>
+          <span className="tabular-nums">{task.approvedProgress ?? 0}%</span>
+        </div>
+        <ProgressBar value={task.approvedProgress ?? 0} />
+      </div>
 
       <div className="flex items-center justify-between pt-0.5">
         <Avatar className="size-6">
@@ -549,7 +557,8 @@ function ListView({
               <TableHead>Priority</TableHead>
               <TableHead>Assignee</TableHead>
               <TableHead>Due</TableHead>
-              <TableHead className="text-right">Points</TableHead>
+              <TableHead className="text-right">Progress</TableHead>
+              <TableHead className="text-right">Weight</TableHead>
               <TableHead className="w-10 pr-4" />
             </TableRow>
           </TableHeader>
@@ -612,7 +621,10 @@ function ListView({
                   {shortDate(t.due)}
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">
-                  {t.points}
+                  {t.approvedProgress ?? 0}%
+                </TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                  {t.weight ?? 0}%
                 </TableCell>
                 <TableCell className="pr-4 text-right">
                   <TaskMenu task={t} actions={actions} className="ml-auto" />
@@ -738,10 +750,7 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
               const left = toPct(isoToMs(t.start));
               const right = toPct(isoToMs(t.due));
               const width = Math.max(right - left, 2.5);
-              const subPct =
-                t.subtasks.total > 0
-                  ? (t.subtasks.done / t.subtasks.total) * 100
-                  : 0;
+              const progress = t.approvedProgress ?? 0;
               return (
                 <div
                   key={t.id}
@@ -750,7 +759,7 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
                   <div className="w-56 shrink-0 border-r px-4 py-2">
                     <p className="truncate text-sm font-medium">{t.title}</p>
                     <p className="truncate text-[11px] text-muted-foreground">
-                      {t.id} · {firstName(t.assignee.name)}
+                      {t.id} · {firstName(t.assignee.name)} · {progress}% progress · {t.weight ?? 0}% weight
                     </p>
                   </div>
                   <div className="relative h-11 flex-1">
@@ -762,12 +771,12 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
                         >
                           <div
                             className={`h-full ${BAR_FILL[t.status]}`}
-                            style={{ width: `${subPct}%` }}
+                            style={{ width: `${progress}%` }}
                           />
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {t.title} · {shortDate(t.start)} – {shortDate(t.due)}
+                        {t.title} · {progress}% progress · {t.weight ?? 0}% weight
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -806,22 +815,33 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
 function MembersView({
   project,
   tasks,
+  members,
 }: {
   project: Project;
   tasks: Task[];
+  members: TeamMember[];
 }) {
-  const roster = [
-    { member: project.lead, lead: true },
-    ...project.members
-      .filter((m) => m.id !== project.lead.id)
-      .map((member) => ({ member, lead: false })),
-  ];
+  // Prefer the project's memberships from the API. They include every project
+  // role (manager, lead, observer, and team member); the seeded data is only a
+  // fallback for projects that are not connected to the API yet.
+  const projectMembers = members.length
+    ? members
+    : [
+        project.lead,
+        ...project.members.filter((member) => member.id !== project.lead.id),
+      ];
+  const roster = projectMembers.map((member) => ({
+    member,
+    lead:
+      member.role.toLowerCase() === "lead" ||
+      (!members.length && member.id === project.lead.id),
+  }));
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {roster.map(({ member, lead }) => {
         const assigned = tasks.filter((t) => t.assignee.id === member.id);
-        const points = assigned.reduce((s, t) => s + t.points, 0);
+        const weight = assigned.reduce((sum, task) => sum + (task.weight ?? 0), 0);
         return (
           <Card key={member.id} className={lead ? "ring-1 ring-primary/30" : ""}>
             <CardContent className="space-y-4">
@@ -838,17 +858,27 @@ function MembersView({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate font-medium">{member.name}</p>
-                    {lead && (
+                    {member.role && (
                       <Badge
                         variant="secondary"
                         className="bg-primary/10 text-primary"
                       >
-                        Lead
+                        {member.role === "manager"
+                          ? "Manager"
+                          : member.role === "lead"
+                            ? "Lead"
+                            : member.role === "observer"
+                              ? "Observer"
+                              : member.role === "member"
+                                ? "Member"
+                                : lead
+                                  ? "Lead"
+                                  : "Member"}
                       </Badge>
                     )}
                   </div>
                   <p className="truncate text-sm text-muted-foreground">
-                    {member.role}
+                    {member.department}
                   </p>
                 </div>
               </div>
@@ -873,8 +903,8 @@ function MembersView({
                   <p className="text-xs text-muted-foreground">Assigned</p>
                 </div>
                 <div className="rounded-lg bg-muted/50 px-3 py-2">
-                  <p className="text-lg font-semibold tabular-nums">{points}</p>
-                  <p className="text-xs text-muted-foreground">Points</p>
+                  <p className="text-lg font-semibold tabular-nums">{weight}%</p>
+                  <p className="text-xs text-muted-foreground">Weight</p>
                 </div>
               </div>
             </CardContent>
@@ -906,7 +936,7 @@ function buildActivity(project: Project, tasks: Task[]): ActivityEvent[] {
   const doneMs = project.milestones.filter((m) => m.done);
 
   const t = (arr: Task[], i: number, fb = 0) =>
-    (arr[i] ?? tasks[fb]).title;
+    (arr[i] ?? tasks[fb])?.title ?? "a task";
 
   return [
     {
@@ -1007,8 +1037,11 @@ function OverviewView({
   events: ActivityEvent[];
 }) {
   const doneTasks = tasks.filter((t) => t.status === "Done");
-  const totalPoints = tasks.reduce((s, t) => s + t.points, 0);
-  const donePoints = doneTasks.reduce((s, t) => s + t.points, 0);
+  const totalWeight = tasks.reduce((sum, task) => sum + (task.weight ?? 0), 0);
+  const approvedWeight = tasks.reduce(
+    (sum, task) => sum + ((task.weight ?? 0) * (task.approvedProgress ?? 0)) / 100,
+    0
+  );
   const teamSize = new Set([
     project.lead.id,
     ...project.members.map((m) => m.id),
@@ -1033,9 +1066,9 @@ function OverviewView({
     },
     {
       icon: IconBolt,
-      label: "Story points",
-      value: `${donePoints}/${totalPoints}`,
-      hint: "Completed of planned",
+      label: "Weighted progress",
+      value: `${Math.round(approvedWeight)}%`,
+      hint: `${totalWeight}% task weight allocated`,
     },
     {
       icon: IconUsers,
@@ -1231,11 +1264,13 @@ const TABS = [
 export function ProjectWorkspace({
   project,
   tasks,
+  members,
   actions,
   onAddTask,
 }: {
   project: Project;
   tasks: Task[];
+  members: TeamMember[];
   actions: TaskActions;
   onAddTask: (status: TaskStatus) => void;
 }) {
@@ -1267,7 +1302,7 @@ export function ProjectWorkspace({
         <GanttView project={project} tasks={tasks} />
       </TabsContent>
       <TabsContent value="members">
-        <MembersView project={project} tasks={tasks} />
+        <MembersView project={project} tasks={tasks} members={members} />
       </TabsContent>
       <TabsContent value="activity">
         <Card>
