@@ -13,17 +13,17 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'username', 'first_name', 'last_name', 'email', 'mobile',
             'job_title', 'department', 'department_detail', 'is_active',
-            'date_joined', 'last_login',
+            'is_staff', 'is_superuser', 'date_joined', 'last_login',
         )
-        read_only_fields = ('id', 'date_joined', 'last_login')
+        read_only_fields = ('id', 'is_staff', 'is_superuser', 'date_joined', 'last_login')
         extra_kwargs = {'password': {'write_only': True}}
 
 
 class UserWriteSerializer(UserSerializer):
-    password = serializers.CharField(write_only=True, required=False, min_length=8)
+    password = serializers.CharField(write_only=True, required=False)
 
     class Meta(UserSerializer.Meta):
-        fields = UserSerializer.Meta.fields + ('password', 'is_staff', 'is_superuser')
+        fields = UserSerializer.Meta.fields + ('password',)
         read_only_fields = ('id', 'date_joined', 'last_login')
 
     def create(self, validated_data):
@@ -40,7 +40,7 @@ class UserWriteSerializer(UserSerializer):
 class MyProfileSerializer(UserSerializer):
     class Meta(UserSerializer.Meta):
         read_only_fields = (
-            'id', 'username', 'department', 'department_detail', 'is_active',
+            'id', 'username', 'department', 'department_detail', 'is_active', 'is_staff', 'is_superuser',
             'date_joined', 'last_login',
         )
 
