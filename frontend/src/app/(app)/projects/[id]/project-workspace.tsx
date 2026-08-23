@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   IconLayoutDashboard,
@@ -43,6 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
@@ -111,15 +112,6 @@ const STATUS_STATE: Record<TeamMember["status"], string> = {
   Offline: "bg-muted-foreground/40",
 };
 
-// Gantt bar colors (uniform neutral track, monochrome fill by status).
-const BAR_FILL: Record<TaskStatus, string> = {
-  Backlog: STATUS_DOT.Backlog,
-  Todo: STATUS_DOT.Todo,
-  "In Progress": STATUS_DOT["In Progress"],
-  "In Review": STATUS_DOT["In Review"],
-  Done: STATUS_DOT.Done,
-};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -147,6 +139,11 @@ function shortDate(iso: string) {
   });
 }
 
+function ganttProgressColor(progress: number) {
+  const clamped = Math.min(100, Math.max(0, progress));
+  return `hsl(0 0% ${25 + clamped * 0.75}%)`;
+}
+
 function longDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
@@ -159,7 +156,6 @@ const DAY = 86_400_000;
 const WINDOW_START = new Date("2026-07-01T00:00:00Z").getTime();
 const WINDOW_END = new Date("2026-10-01T00:00:00Z").getTime();
 const WINDOW_SPAN = WINDOW_END - WINDOW_START;
-const TODAY = new Date("2026-08-08T00:00:00Z").getTime();
 
 function toPct(ms: number) {
   return Math.min(100, Math.max(0, ((ms - WINDOW_START) / WINDOW_SPAN) * 100));
@@ -390,7 +386,7 @@ function BoardCard({ task, actions }: { task: Task; actions: TaskActions }) {
           <span>Progress</span>
           <span className="tabular-nums">{task.approvedProgress ?? 0}%</span>
         </div>
-        <ProgressBar value={task.approvedProgress ?? 0} />
+        <Progress value={task.approvedProgress ?? 0} className="h-1.5" />
       </div>
 
       <div className="flex items-center justify-between pt-0.5">
@@ -557,7 +553,7 @@ function ListView({
               <TableHead>Priority</TableHead>
               <TableHead>Assignee</TableHead>
               <TableHead>Due</TableHead>
-              <TableHead className="text-right">Progress</TableHead>
+              <TableHead>Progress</TableHead>
               <TableHead className="text-right">Weight</TableHead>
               <TableHead className="w-10 pr-4" />
             </TableRow>
@@ -620,8 +616,13 @@ function ListView({
                 <TableCell className="text-sm text-muted-foreground tabular-nums">
                   {shortDate(t.due)}
                 </TableCell>
-                <TableCell className="text-right font-medium tabular-nums">
-                  {t.approvedProgress ?? 0}%
+                <TableCell>
+                  <div className="flex w-32 items-center gap-2">
+                    <Progress value={t.approvedProgress ?? 0} className="h-1.5" />
+                    <span className="w-9 text-right text-xs font-medium tabular-nums">
+                      {t.approvedProgress ?? 0}%
+                    </span>
+                  </div>
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">
                   {t.weight ?? 0}%
@@ -649,6 +650,18 @@ const GANTT_MONTHS = [
 ];
 
 function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
+  const [todayMs, setTodayMs] = useState(WINDOW_START);
+
+  useEffect(() => {
+    const refreshToday = () => setTodayMs(Date.now());
+    const initialRefresh = window.setTimeout(refreshToday, 0);
+    const interval = window.setInterval(refreshToday, 60 * 60 * 1000);
+    return () => {
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(interval);
+    };
+  }, []);
+
   const rows = useMemo(
     () =>
       [...tasks].sort((a, b) => isoToMs(a.start) - isoToMs(b.start)).slice(0, 14),
@@ -663,7 +676,7 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
     .filter((m) => m.ms >= WINDOW_START && m.ms <= WINDOW_END)
     .map((m) => ({ ...m, pct: toPct(m.ms) }));
 
-  const todayPct = toPct(TODAY);
+  const todayPct = toPct(todayMs);
 
   return (
     <Card className="overflow-hidden py-0">
@@ -689,7 +702,7 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
           </div>
 
           {/* Milestone strip */}
-          <div className="flex border-b bg-background">
+          <div className="hidden flex border-b bg-background">
             <div className="w-56 shrink-0 border-r px-4 py-2 text-[11px] font-medium text-muted-foreground">
               Milestones
             </div>
@@ -731,17 +744,25 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
                     style={{ left: `${x}%` }}
                   />
                 ))}
-                {milestones.map((m) => (
+                {false && milestones.map((m) => (
                   <div
                     key={m.title}
                     className="absolute inset-y-0 w-px border-l border-dashed border-muted-foreground/40"
                     style={{ left: `${m.pct}%` }}
                   />
                 ))}
-                <div
-                  className="absolute inset-y-0 w-0.5 bg-primary/50"
-                  style={{ left: `${todayPct}%` }}
-                />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="pointer-events-auto absolute inset-y-0 z-10 -translate-x-1/2 cursor-help px-1"
+                      style={{ left: `${todayPct}%` }}
+                      aria-label="Today"
+                    >
+                      <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary/50" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Today</TooltipContent>
+                </Tooltip>
               </div>
             </div>
 
@@ -770,8 +791,11 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
                           style={{ left: `${left}%`, width: `${width}%` }}
                         >
                           <div
-                            className={`h-full ${BAR_FILL[t.status]}`}
-                            style={{ width: `${progress}%` }}
+                            className="h-full transition-colors"
+                            style={{
+                              width: `${progress}%`,
+                              backgroundColor: ganttProgressColor(progress),
+                            }}
                           />
                         </div>
                       </TooltipTrigger>
@@ -787,13 +811,11 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
 
           {/* Legend */}
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t px-4 py-3 text-xs text-muted-foreground">
-            {BOARD_COLUMNS.map((c) => (
-              <span key={c.status} className="flex items-center gap-1.5">
-                <span className={`size-2.5 rounded-sm ${c.dot}`} />
-                {c.status}
-              </span>
-            ))}
             <span className="flex items-center gap-1.5">
+              <span className="h-2 w-16 rounded-sm bg-gradient-to-r from-zinc-700 via-zinc-400 to-white" />
+              Progress
+            </span>
+            <span className="hidden flex items-center gap-1.5">
               <span className="size-2.5 rotate-45 rounded-[2px] bg-foreground" />
               Milestone
             </span>
