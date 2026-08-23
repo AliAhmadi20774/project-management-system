@@ -17,11 +17,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "OrbynAdmin",
-    template: "%s · OrbynAdmin",
+    default: "ProjectHub",
+    template: "%s · ProjectHub",
   },
   description:
-    "A polished admin & SaaS dashboard template built with Next.js, Tailwind and shadcn/ui.",
+    "Project management workspace for teams.",
 };
 
 export default function RootLayout({

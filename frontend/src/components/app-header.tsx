@@ -13,7 +13,8 @@ import {
 } from "@tabler/icons-react";
 
 import { navGroups } from "@/config/nav";
-import { currentUser, recentActivity } from "@/data";
+import { recentActivity } from "@/data";
+import { useAuth } from "@/components/auth-provider";
 import { useIsMac } from "@/hooks/use-platform";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -227,29 +228,34 @@ function NotificationsMenu() {
 }
 
 function UserMenu() {
+  const { user, logout } = useAuth();
+
+  if (!user) return null;
+
+  const name = [user.first_name, user.last_name].filter(Boolean).join(" ") || user.username;
+  const initials = `${user.first_name[0] ?? ""}${user.last_name[0] ?? ""}`.toUpperCase() || user.username.slice(0, 2);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="h-9 gap-2 px-1.5">
           <Avatar className="size-7">
-            <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-            <AvatarFallback>AM</AvatarFallback>
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <span className="hidden text-sm font-medium lg:inline">
-            {currentUser.name}
+            {name}
           </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="flex items-center gap-2">
           <Avatar className="size-8 shrink-0">
-            <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-            <AvatarFallback>AM</AvatarFallback>
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="grid min-w-0">
-            <span className="truncate text-sm font-medium">{currentUser.name}</span>
+            <span className="truncate text-sm font-medium">{name}</span>
             <span className="truncate text-xs text-muted-foreground">
-              {currentUser.email}
+              {user.email}
             </span>
           </div>
         </DropdownMenuLabel>
@@ -272,10 +278,8 @@ function UserMenu() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/login">
-            <IconLogout className="size-4" /> Log out
-          </Link>
+        <DropdownMenuItem onClick={logout}>
+          <IconLogout className="size-4" /> Log out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

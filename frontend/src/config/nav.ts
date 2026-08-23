@@ -30,7 +30,7 @@ export type Workspace = {
 };
 
 export const workspaces: Workspace[] = [
-  { name: "OrbynAdmin", plan: "Enterprise", icon: IconSparkles },
+  { name: "ProjectHub", plan: "Enterprise", icon: IconSparkles },
   { name: "Vertex Labs", plan: "Startup", icon: IconRocket },
   { name: "Northwind", plan: "Free", icon: IconWorld },
 ];

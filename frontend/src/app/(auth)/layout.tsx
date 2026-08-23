@@ -8,11 +8,11 @@ export default function AuthLayout({
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
       <div className="flex flex-col gap-4 p-6 md:p-10">
-        <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+        <Link href="/login" className="flex items-center gap-2 font-semibold">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <IconSparkles className="size-5" />
           </div>
-          OrbynAdmin
+          ProjectHub
         </Link>
         <div className="flex flex-1 items-center justify-center">
           <div className="w-full max-w-sm">{children}</div>
