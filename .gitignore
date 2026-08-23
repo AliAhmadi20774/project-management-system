@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Frontend build and local configuration
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+
+# Local source copy retained only for reference; frontend/ is versioned.
+orbynadmin/

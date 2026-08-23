@@ -13,11 +13,11 @@ services:
       timeout: 5s
       retries: 10
 
-  web:
-    build: .
+  api:
+    build: ./backend
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
-      - .:/app
+      - ./backend:/app
     ports:
       - "8000:8000"
     environment:
@@ -30,5 +30,20 @@ services:
       db:
         condition: service_healthy
 
+  ui:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --hostname 0.0.0.0"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
+  frontend_node_modules:
+  frontend_next:
