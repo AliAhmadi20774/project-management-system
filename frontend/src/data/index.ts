@@ -311,6 +311,7 @@ export const company = {
 // ---------------------------------------------------------------------------
 
 export type TeamMember = {
+  membershipId?: number;
   id: string;
   name: string;
   role: string;
@@ -346,6 +347,7 @@ export type TaskPriority = "Low" | "Medium" | "High" | "Urgent";
 
 export type Task = {
   id: string;
+  backendId?: number;
   title: string;
   status: TaskStatus;
   priority: TaskPriority;
@@ -357,6 +359,8 @@ export type Task = {
   points: number;
   weight?: number;
   approvedProgress?: number;
+  reportedProgress?: number;
+  progressState?: "draft" | "pending_review" | "approved" | "rejected";
   comments: number;
   subtasks: { total: number; done: number };
 };

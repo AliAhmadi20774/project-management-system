@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DeleteDialog } from "@/components/delete-dialog";
+import { useAuth } from "@/components/auth-provider";
 import {
   type Project,
   type ProjectStatus,
@@ -65,17 +66,19 @@ const TASK_STATUSES: TaskStatus[] = [
 const TASK_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Urgent"];
 const MS_DAY = 86_400_000;
 
-const API_TASK_STATUS: Record<TaskStatus, "todo" | "in_progress" | "done"> = {
-  Backlog: "todo",
+const API_TASK_STATUS: Record<TaskStatus, "backlog" | "todo" | "in_progress" | "in_review" | "done"> = {
+  Backlog: "backlog",
   Todo: "todo",
   "In Progress": "in_progress",
-  "In Review": "in_progress",
+  "In Review": "in_review",
   Done: "done",
 };
 
 const WORKSPACE_TASK_STATUS: Record<string, TaskStatus> = {
+  backlog: "Backlog",
   todo: "Todo",
   in_progress: "In Progress",
+  in_review: "In Review",
   done: "Done",
 };
 
@@ -315,7 +318,10 @@ function AddTaskDialog({
 // ---------------------------------------------------------------------------
 
 export function ProjectDetail({ project }: { project: Project }) {
+  const { user } = useAuth();
   const [roster, setRoster] = useState<TeamMember[]>([]);
+  const [canManageMembers, setCanManageMembers] = useState(false);
+  const [memberCandidates, setMemberCandidates] = useState<Array<{ id: string; name: string; email: string }>>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectProgress, setProjectProgress] = useState(project.progress);
@@ -351,7 +357,8 @@ export function ProjectDetail({ project }: { project: Project }) {
         if (!projectResponse.ok) throw new Error(projectData.detail || "Could not load project progress.");
 
         const memberships = Array.isArray(membersData) ? membersData : membersData.results || [];
-        const members: TeamMember[] = memberships.map((item: { user: number; user_name: string; user_email: string; role: string }) => ({
+        const members: TeamMember[] = memberships.map((item: { id: number; user: number; user_name: string; user_email: string; role: string }) => ({
+          membershipId: item.id,
           id: String(item.user),
           name: item.user_name,
           role: item.role,
@@ -365,8 +372,9 @@ export function ProjectDetail({ project }: { project: Project }) {
         if (cancelled) return;
 
         setRoster(members);
-        setTasks(items.map((item: { id: number; title: string; status: string; assignee: number | null; start_date: string | null; end_date: string | null; weight: number; approved_progress: number }) => ({
+        setTasks(items.map((item: { id: number; title: string; status: string; assignee: number | null; start_date: string | null; end_date: string | null; weight: number; approved_progress: number; reported_progress: number; progress_state: Task["progressState"] }) => ({
           id: `${project.key}-${item.id}`,
+          backendId: item.id,
           title: item.title,
           status: WORKSPACE_TASK_STATUS[item.status] || "Todo",
           priority: "Medium",
@@ -387,6 +395,8 @@ export function ProjectDetail({ project }: { project: Project }) {
           points: 3,
           weight: item.weight,
           approvedProgress: item.approved_progress,
+          reportedProgress: item.reported_progress,
+          progressState: item.progress_state,
           comments: 0,
           subtasks: { total: 0, done: 0 },
         })));
@@ -395,6 +405,22 @@ export function ProjectDetail({ project }: { project: Project }) {
           total: projectData.task_count,
           done: projectData.completed_task_count,
         });
+        const mayManageMembers = Boolean(projectData.can_manage_members);
+        setCanManageMembers(mayManageMembers);
+        if (mayManageMembers) {
+          const candidatesResponse = await fetch(`/api/project-memberships/candidates?project=${backendProjectId}`, { cache: "no-store" });
+          const candidatesData = await candidatesResponse.json();
+          if (!cancelled && candidatesResponse.ok) {
+            const candidates = Array.isArray(candidatesData) ? candidatesData : candidatesData.results || [];
+            setMemberCandidates(candidates.map((candidate: { id: number; name: string; email: string }) => ({
+              id: String(candidate.id),
+              name: candidate.name,
+              email: candidate.email,
+            })));
+          }
+        } else {
+          setMemberCandidates([]);
+        }
         setMembersLoaded(true);
       } catch (error) {
         if (!cancelled) {
@@ -462,6 +488,7 @@ export function ProjectDetail({ project }: { project: Project }) {
     const now = Date.now();
     const task: Task = {
       id,
+      backendId: data.id,
       title: input.title,
       status: input.status,
       priority: input.priority,
@@ -472,6 +499,9 @@ export function ProjectDetail({ project }: { project: Project }) {
       due: input.endDate || new Date(now + 7 * MS_DAY).toISOString().slice(0, 10),
       points: 0,
       weight: input.weight,
+      approvedProgress: data.approved_progress ?? 0,
+      reportedProgress: data.reported_progress ?? input.progress,
+      progressState: data.progress_state,
       comments: 0,
       subtasks: { total: 0, done: 0 },
     };
@@ -497,6 +527,232 @@ export function ProjectDetail({ project }: { project: Project }) {
     },
     onDelete: (task) => setPendingDelete(task),
   };
+
+  async function updateTaskProgress(task: Task, progress: number) {
+    if (!task.backendId) throw new Error("This task is not connected to the API.");
+
+    const response = await fetch(`/api/tasks/${task.backendId}?action=submit-progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ progress }),
+    });
+    const responseText = await response.text();
+    let data: {
+      detail?: string;
+      approved_progress?: number;
+      reported_progress?: number;
+      progress_state?: Task["progressState"];
+    };
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      throw new Error(
+        response.status === 404
+          ? "The progress API route is unavailable. Please refresh and try again."
+          : "The server returned an invalid response."
+      );
+    }
+    if (!response.ok) {
+      throw new Error(typeof data.detail === "string" ? data.detail : "Could not update progress.");
+    }
+
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === task.id
+          ? {
+              ...item,
+              approvedProgress: data.approved_progress,
+              reportedProgress: data.reported_progress,
+              progressState: data.progress_state,
+            }
+          : item
+      )
+    );
+
+    if (data.progress_state === "approved") {
+      const backendProjectId = getBackendProjectId(project.id);
+      const projectResponse = await fetch(`/api/projects/${backendProjectId}`, { cache: "no-store" });
+      const projectData = await projectResponse.json();
+      if (projectResponse.ok) setProjectProgress(projectData.progress);
+      toast.success("Progress updated", { description: `${task.title}: ${progress}%` });
+    } else {
+      toast.success("Progress submitted for review", { description: `${task.title}: ${progress}%` });
+    }
+  }
+
+  async function updateTaskDetails(
+    task: Task,
+    input: {
+      title: string;
+      status: TaskStatus;
+      assigneeId: string;
+      start: string;
+      due: string;
+      weight: number;
+    }
+  ) {
+    if (!task.backendId) throw new Error("This task is not connected to the API.");
+    const response = await fetch(`/api/tasks/${task.backendId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: input.title,
+        status: API_TASK_STATUS[input.status],
+        assignee: input.assigneeId === "unassigned" ? null : Number(input.assigneeId),
+        start_date: input.start || null,
+        end_date: input.due || null,
+        weight: input.weight,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(typeof data.detail === "string" ? data.detail : "Could not update task details.");
+    }
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === task.id
+          ? {
+              ...item,
+              title: data.title,
+              status: WORKSPACE_TASK_STATUS[data.status] || input.status,
+              start: data.start_date || project.start,
+              due: data.end_date || project.due,
+              weight: data.weight,
+              assignee:
+                roster.find((member) => member.id === String(data.assignee)) ?? {
+                  id: `unassigned-${data.id}`,
+                  name: "Unassigned",
+                  role: "",
+                  department: "",
+                  email: "",
+                  avatar: "",
+                  status: "Offline",
+                  location: "",
+                },
+            }
+          : item
+      )
+    );
+    const backendProjectId = getBackendProjectId(project.id);
+    const projectResponse = await fetch(`/api/projects/${backendProjectId}`, { cache: "no-store" });
+    const projectData = await projectResponse.json();
+    if (projectResponse.ok) {
+      setProjectProgress(projectData.progress);
+      setProjectTaskCounts({
+        total: projectData.task_count,
+        done: projectData.completed_task_count,
+      });
+    }
+  }
+
+  async function reviewTaskProgress(task: Task, approved: boolean) {
+    if (!task.backendId) throw new Error("This task is not connected to the API.");
+    const response = await fetch(`/api/tasks/${task.backendId}?action=review-progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(typeof data.detail === "string" ? data.detail : "Could not review progress.");
+    }
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === task.id
+          ? {
+              ...item,
+              approvedProgress: data.approved_progress,
+              reportedProgress: data.reported_progress,
+              progressState: data.progress_state,
+            }
+          : item
+      )
+    );
+    const backendProjectId = getBackendProjectId(project.id);
+    const projectResponse = await fetch(`/api/projects/${backendProjectId}`, { cache: "no-store" });
+    const projectData = await projectResponse.json();
+    if (projectResponse.ok) setProjectProgress(projectData.progress);
+    toast.success(approved ? "Progress approved" : "Progress rejected");
+  }
+
+  async function addProjectMember(userId: string, role: "lead" | "observer" | "member") {
+    const backendProjectId = getBackendProjectId(project.id);
+    if (!backendProjectId) throw new Error("This project is not connected to the API.");
+    const response = await fetch("/api/project-memberships", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project: backendProjectId, user: Number(userId), role }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Could not add project member.");
+    const member: TeamMember = {
+      membershipId: data.id,
+      id: String(data.user),
+      name: data.user_name,
+      role: data.role,
+      department: "Project",
+      email: data.user_email,
+      avatar: "",
+      status: "Active",
+      location: "",
+    };
+    setRoster((current) => [...current, member]);
+    setMemberCandidates((current) => current.filter((candidate) => candidate.id !== member.id));
+    toast.success("Member added", { description: `${member.name} was added to this project.` });
+  }
+
+  async function removeProjectMember(member: TeamMember) {
+    if (!member.membershipId) throw new Error("This project membership is not connected to the API.");
+    const response = await fetch(`/api/project-memberships/${member.membershipId}`, { method: "DELETE" });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(typeof data.detail === "string" ? data.detail : "Could not remove project member.");
+    }
+    setRoster((current) => current.filter((item) => item.id !== member.id));
+    setTasks((current) => current.map((task) => task.assignee.id === member.id ? {
+      ...task,
+      assignee: {
+        id: `unassigned-${task.backendId ?? task.id}`,
+        name: "Unassigned",
+        role: "",
+        department: "",
+        email: "",
+        avatar: "",
+        status: "Offline",
+        location: "",
+      },
+    } : task));
+    setMemberCandidates((current) => [...current, { id: member.id, name: member.name, email: member.email }]);
+    toast.success("Member removed", { description: `${member.name} was removed from this project.` });
+  }
+
+  async function updateProjectMemberRole(member: TeamMember, role: "lead" | "observer" | "member") {
+    if (!member.membershipId) throw new Error("This project membership is not connected to the API.");
+    if (member.role === role) return;
+    const response = await fetch(`/api/project-memberships/${member.membershipId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      const message = typeof data.role?.[0] === "string"
+        ? data.role[0]
+        : typeof data.detail === "string" ? data.detail : "Could not update the project role.";
+      throw new Error(message);
+    }
+    setRoster((current) => current.map((item) =>
+      item.membershipId === member.membershipId ? { ...item, role: data.role } : item
+    ));
+    toast.success("Project role updated", { description: `${member.name} is now ${data.role}.` });
+  }
+
+  const currentRoles = roster
+    .filter((member) => member.id === String(user?.id))
+    .map((member) => member.role);
+  const isSystemAdmin = Boolean(user?.is_superuser);
+  const canSubmitProgress = isSystemAdmin || currentRoles.includes("lead");
+  const canReviewProgress = isSystemAdmin || currentRoles.includes("observer");
 
   const shown = roster.slice(0, 5);
   const extra = roster.length - shown.length;
@@ -653,8 +909,18 @@ export function ProjectDetail({ project }: { project: Project }) {
         tasks={tasks}
         members={roster}
         actions={actions}
-        onAddTask={(status) => openAddTask(status, true)}
-      />
+        canSubmitProgress={canSubmitProgress}
+        canReviewProgress={canReviewProgress}
+        onProgressChange={updateTaskProgress}
+        onTaskDetailsChange={updateTaskDetails}
+          onReviewProgress={reviewTaskProgress}
+          onAddTask={(status) => openAddTask(status, true)}
+          canManageMembers={canManageMembers}
+          memberCandidates={memberCandidates}
+          onAddMember={addProjectMember}
+          onRemoveMember={removeProjectMember}
+          onUpdateMemberRole={updateProjectMemberRole}
+        />
 
       <AddTaskDialog
         open={addOpen}

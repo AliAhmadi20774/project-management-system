@@ -118,11 +118,9 @@ const FILTERS: Array<{ value: string; label: string }> = [
 ];
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[month - 1]} ${day}, ${year}`;
 }
 
 function initials(name: string) {

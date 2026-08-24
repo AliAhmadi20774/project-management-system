@@ -1,33 +1,25 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
-import { ACCESS_COOKIE, apiBaseUrl } from "@/lib/auth";
+import { authenticatedApiFetch, proxyAuthenticatedResponse } from "@/lib/auth";
 
 async function requestTasks(request: NextRequest, init?: RequestInit) {
-  const access = request.cookies.get(ACCESS_COOKIE)?.value;
-  if (!access) return null;
   const query = request.nextUrl.searchParams.toString();
-  return fetch(`${apiBaseUrl}/api/v1/tasks/${query ? `?${query}` : ""}`, {
+  return authenticatedApiFetch(request, `/api/v1/tasks/${query ? `?${query}` : ""}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${access}`,
       "Content-Type": "application/json",
       ...init?.headers,
     },
-    cache: "no-store",
   });
 }
 
 export async function GET(request: NextRequest) {
-  const response = await requestTasks(request);
-  if (!response) return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
-  return NextResponse.json(await response.json(), { status: response.status });
+  return proxyAuthenticatedResponse(await requestTasks(request));
 }
 
 export async function POST(request: NextRequest) {
-  const response = await requestTasks(request, {
+  return proxyAuthenticatedResponse(await requestTasks(request, {
     method: "POST",
     body: JSON.stringify(await request.json()),
-  });
-  if (!response) return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
-  return NextResponse.json(await response.json(), { status: response.status });
+  }));
 }

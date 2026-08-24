@@ -28,7 +28,7 @@ export function DeleteDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm?: () => void;
+  onConfirm?: () => void | Promise<void>;
   name?: string;
   description?: string;
 }) {
@@ -46,11 +46,15 @@ export function DeleteDialog({
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
             className={cn(buttonVariants({ variant: "destructive" }))}
-            onClick={() => {
-              onConfirm?.();
-              toast.success(`${name} deleted`, {
-                description: "The record has been removed.",
-              });
+            onClick={async () => {
+              try {
+                await onConfirm?.();
+                toast.success(`${name} deleted`, {
+                  description: "The record has been removed.",
+                });
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : `Could not delete ${name}.`);
+              }
             }}
           >
             Delete

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { toast } from "sonner";
 import {
   IconLayoutDashboard,
@@ -29,6 +29,7 @@ import {
   IconClock,
   IconTargetArrow,
   IconSubtask,
+  IconUserPlus,
 } from "@tabler/icons-react";
 
 import {
@@ -41,10 +42,40 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { DeleteDialog } from "@/components/delete-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -78,14 +109,22 @@ import {
 // Meta maps
 // ---------------------------------------------------------------------------
 
-// Neutral, monochrome ramp for the task pipeline: faint → strong as work
-// progresses. No hues anywhere — differentiation comes from shade + label.
+// Neutral status markers are used outside the Gantt; the timeline has its
+// own compact semantic dot so that progress brightness remains unambiguous.
 const STATUS_DOT: Record<TaskStatus, string> = {
   Backlog: "bg-muted-foreground/40",
   Todo: "bg-muted-foreground/60",
   "In Progress": "bg-muted-foreground",
   "In Review": "bg-foreground/70",
   Done: "bg-foreground",
+};
+
+const TIMELINE_STATUS_DOT: Record<TaskStatus, string> = {
+  Backlog: "bg-slate-500",
+  Todo: "bg-sky-500",
+  "In Progress": "bg-blue-500",
+  "In Review": "bg-amber-500",
+  Done: "bg-emerald-500",
 };
 
 const BOARD_COLUMNS: {
@@ -124,10 +163,6 @@ function initials(name: string) {
     .slice(0, 2);
 }
 
-function firstName(name: string) {
-  return name.split(" ")[0];
-}
-
 function currency(n: number) {
   return `$${Math.round(n).toLocaleString("en-US")}`;
 }
@@ -141,7 +176,7 @@ function shortDate(iso: string) {
 
 function ganttProgressColor(progress: number) {
   const clamped = Math.min(100, Math.max(0, progress));
-  return `hsl(0 0% ${25 + clamped * 0.75}%)`;
+  return `color-mix(in oklch, var(--timeline-progress-start) ${100 - clamped}%, var(--timeline-progress-end) ${clamped}%)`;
 }
 
 function longDate(iso: string) {
@@ -649,7 +684,373 @@ const GANTT_MONTHS = [
   { label: "September", days: 30 },
 ];
 
-function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
+function EditableGanttBar({
+  task,
+  progress,
+  members,
+  canSubmitProgress,
+  canReviewProgress,
+  onChange,
+  onTaskDetailsChange,
+  onReviewProgress,
+}: {
+  task: Task;
+  progress: number;
+  members: TeamMember[];
+  canSubmitProgress: boolean;
+  canReviewProgress: boolean;
+  onChange: (task: Task, progress: number) => Promise<void>;
+  onTaskDetailsChange: (
+    task: Task,
+    input: { title: string; status: TaskStatus; assigneeId: string; start: string; due: string; weight: number }
+  ) => Promise<void>;
+  onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState(progress);
+  const [inputValue, setInputValue] = useState(String(progress));
+  const [dragging, setDragging] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(task.title);
+  const [draftStatus, setDraftStatus] = useState<TaskStatus>(task.status);
+  const [draftAssignee, setDraftAssignee] = useState(
+    task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id
+  );
+  const [draftStart, setDraftStart] = useState(task.start);
+  const [draftDue, setDraftDue] = useState(task.due);
+  const [draftWeight, setDraftWeight] = useState(task.weight ?? 1);
+
+  const detailsDirty =
+    draftTitle.trim() !== task.title ||
+    draftStatus !== task.status ||
+    draftAssignee !== (task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id) ||
+    draftStart !== task.start ||
+    draftDue !== task.due ||
+    draftWeight !== (task.weight ?? 1);
+
+  function resetDrafts() {
+    setDraft(progress);
+    setInputValue(String(progress));
+    setDraftTitle(task.title);
+    setDraftStatus(task.status);
+    setDraftAssignee(task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id);
+    setDraftStart(task.start);
+    setDraftDue(task.due);
+    setDraftWeight(task.weight ?? 1);
+  }
+
+  function progressFromPointer(event: PointerEvent<HTMLElement>) {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return draft;
+    return Math.max(0, Math.min(100, Math.round(((event.clientX - rect.left) / rect.width) * 100)));
+  }
+
+  async function saveQuickEdit() {
+    const nextProgress = Number(inputValue);
+    if (canSubmitProgress && (!Number.isFinite(nextProgress) || nextProgress < 0 || nextProgress > 100)) {
+      toast.error("Progress must be between 0 and 100.");
+      return;
+    }
+    if (canSubmitProgress && !draftTitle.trim()) {
+      toast.error("Task title is required.");
+      return;
+    }
+    if (canSubmitProgress && draftStart && draftDue && draftDue < draftStart) {
+      toast.error("End date must be on or after start date.");
+      return;
+    }
+    if (canSubmitProgress && (!Number.isInteger(draftWeight) || draftWeight < 1 || draftWeight > 100)) {
+      toast.error("Weight must be a whole number between 1 and 100.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (canSubmitProgress && detailsDirty) {
+        await onTaskDetailsChange(task, {
+          title: draftTitle.trim(),
+          status: draftStatus,
+          assigneeId: draftAssignee,
+          start: draftStart,
+          due: draftDue,
+          weight: draftWeight,
+        });
+      }
+      if (canSubmitProgress && Math.round(nextProgress) !== progress) {
+        await onChange(task, Math.round(nextProgress));
+      } else if (detailsDirty) {
+        toast.success("Task updated");
+      }
+      setOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update task.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reviewProgress(approved: boolean) {
+    setSaving(true);
+    try {
+      await onReviewProgress(task, approved);
+      setOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not review progress.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const tooltip = `${task.title} · ${task.status} · ${draft}% progress · ${task.weight ?? 0}% weight${
+    task.progressState === "pending_review" ? " · Pending review" : ""
+  }`;
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !saving) {
+          resetDrafts();
+        }
+        setOpen(nextOpen);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <div
+          ref={trackRef}
+          className="group/progress relative h-full cursor-pointer select-none overflow-visible"
+          title={tooltip}
+          role="button"
+          tabIndex={0}
+          aria-label={`Edit progress for ${task.title}`}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setInputValue(String(draft));
+            setOpen(true);
+          }}
+          onClick={() => setInputValue(String(draft))}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            setInputValue(String(draft));
+            setOpen(true);
+          }}
+        >
+          <div className="h-full overflow-hidden rounded-md bg-slate-200/80 ring-1 ring-inset ring-slate-300/70 dark:bg-muted dark:ring-border/50">
+            <div
+              className="h-full transition-[width,background-color]"
+              style={{ width: `${draft}%`, backgroundColor: ganttProgressColor(draft) }}
+            />
+          </div>
+          <span
+            className={`absolute -left-1 top-1/2 size-2.5 -translate-y-1/2 rounded-full ring-2 ring-card ${TIMELINE_STATUS_DOT[task.status]}`}
+            aria-label={task.status}
+            title={task.status}
+          />
+          {canSubmitProgress && <button
+              type="button"
+              className={`absolute top-1/2 z-10 h-8 w-4 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize bg-transparent after:absolute after:inset-y-1 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:bg-foreground after:shadow-sm after:ring-1 after:ring-background transition-opacity focus-visible:opacity-100 focus-visible:outline-none ${dragging ? "opacity-100" : "opacity-55 group-hover/progress:opacity-100"}`}
+              style={{ left: `${draft}%` }}
+              aria-label={`Change progress for ${task.title}`}
+              disabled={saving}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setDragging(true);
+              }}
+              onClick={(event) => event.stopPropagation()}
+              onPointerMove={(event) => {
+                if (dragging) setDraft(progressFromPointer(event));
+              }}
+              onPointerUp={(event) => {
+                if (!dragging) return;
+                const next = progressFromPointer(event);
+                setDraft(next);
+                setInputValue(String(next));
+                setDragging(false);
+                setOpen(true);
+              }}
+              onPointerCancel={() => {
+                setDragging(false);
+                setDraft(progress);
+              }}
+          />}
+          {dragging && (
+            <span
+              className="pointer-events-none absolute -top-7 z-20 -translate-x-1/2 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-medium text-background shadow"
+              style={{ left: `${draft}%` }}
+            >
+              {draft}%
+            </span>
+          )}
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-3" align="start">
+        <form
+          className="space-y-2.5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveQuickEdit();
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium">Quick edit</p>
+            <span className="text-[10px] text-muted-foreground">{task.id}</span>
+          </div>
+
+          {canSubmitProgress && (
+            <>
+              <Input
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                className="h-8 text-xs"
+                placeholder="Task title"
+                aria-label="Task title"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={draftStatus} onValueChange={(value) => setDraftStatus(value as TaskStatus)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {BOARD_COLUMNS.map((column) => (
+                      <SelectItem key={column.status} value={column.status}>{column.status}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={draftAssignee} onValueChange={setDraftAssignee}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Assignee" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {members.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Weight</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={draftWeight}
+                    onChange={(event) => setDraftWeight(Number(event.target.value))}
+                    className="h-8 text-xs"
+                  />
+                  <span className="text-[10px] text-muted-foreground">%</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Start</Label>
+                  <Input type="date" value={draftStart} onChange={(event) => setDraftStart(event.target.value)} className="h-8 text-xs" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">End</Label>
+                  <Input type="date" value={draftDue} onChange={(event) => setDraftDue(event.target.value)} className="h-8 text-xs" />
+                </div>
+              </div>
+            </>
+          )}
+
+          {canSubmitProgress && (
+            <div className="space-y-1.5 border-t pt-2.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor={`progress-${task.id}`} className="text-[10px] text-muted-foreground">Progress</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    id={`progress-${task.id}`}
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={inputValue}
+                    onChange={(event) => {
+                      setInputValue(event.target.value);
+                      if (event.target.value) setDraft(Number(event.target.value));
+                    }}
+                    className="h-7 w-16 text-right text-xs"
+                  />
+                  <span className="text-[10px] text-muted-foreground">%</span>
+                </div>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={inputValue || 0}
+                onChange={(event) => {
+                  setInputValue(event.target.value);
+                  setDraft(Number(event.target.value));
+                }}
+                className="h-1.5 w-full cursor-pointer accent-foreground"
+                aria-label={`Progress for ${task.title}`}
+              />
+            </div>
+          )}
+
+          {canReviewProgress && task.progressState === "pending_review" && (
+            <div className="flex items-center justify-between rounded-md border bg-muted/40 p-2">
+              <div>
+                <p className="text-[10px] text-muted-foreground">Reported progress</p>
+                <p className="text-xs font-semibold">{task.reportedProgress ?? 0}%</p>
+              </div>
+              <div className="flex gap-1">
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={saving} onClick={() => void reviewProgress(false)}>Reject</Button>
+                <Button type="button" size="sm" className="h-7 px-2 text-[11px]" disabled={saving} onClick={() => void reviewProgress(true)}>Approve</Button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="flex-1"
+              disabled={saving}
+              onClick={() => {
+                resetDrafts();
+                setOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" className="flex-1" disabled={saving || (!detailsDirty && (!canSubmitProgress || Number(inputValue) === progress))}>
+              {saving ? "Updating..." : "Update"}
+            </Button>
+          </div>
+        </form>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function GanttView({
+  project,
+  tasks,
+  members,
+  canSubmitProgress,
+  canReviewProgress,
+  onProgressChange,
+  onTaskDetailsChange,
+  onReviewProgress,
+}: {
+  project: Project;
+  tasks: Task[];
+  members: TeamMember[];
+  canSubmitProgress: boolean;
+  canReviewProgress: boolean;
+  onProgressChange: (task: Task, progress: number) => Promise<void>;
+  onTaskDetailsChange: (
+    task: Task,
+    input: { title: string; status: TaskStatus; assigneeId: string; start: string; due: string; weight: number }
+  ) => Promise<void>;
+  onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
+}) {
   const [todayMs, setTodayMs] = useState(WINDOW_START);
 
   useEffect(() => {
@@ -771,7 +1172,10 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
               const left = toPct(isoToMs(t.start));
               const right = toPct(isoToMs(t.due));
               const width = Math.max(right - left, 2.5);
-              const progress = t.approvedProgress ?? 0;
+              const progress =
+                t.progressState === "pending_review"
+                  ? t.reportedProgress ?? t.approvedProgress ?? 0
+                  : t.approvedProgress ?? 0;
               return (
                 <div
                   key={t.id}
@@ -780,29 +1184,26 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
                   <div className="w-56 shrink-0 border-r px-4 py-2">
                     <p className="truncate text-sm font-medium">{t.title}</p>
                     <p className="truncate text-[11px] text-muted-foreground">
-                      {t.id} · {firstName(t.assignee.name)} · {progress}% progress · {t.weight ?? 0}% weight
+                      {t.assignee.name}
                     </p>
                   </div>
                   <div className="relative h-11 flex-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div
-                          className="absolute top-1/2 flex h-5 -translate-y-1/2 items-center overflow-hidden rounded-md bg-muted"
-                          style={{ left: `${left}%`, width: `${width}%` }}
-                        >
-                          <div
-                            className="h-full transition-colors"
-                            style={{
-                              width: `${progress}%`,
-                              backgroundColor: ganttProgressColor(progress),
-                            }}
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {t.title} · {progress}% progress · {t.weight ?? 0}% weight
-                      </TooltipContent>
-                    </Tooltip>
+                    <div
+                      className="absolute top-1/2 h-5 -translate-y-1/2 overflow-visible"
+                      style={{ left: `${left}%`, width: `${width}%` }}
+                    >
+                      <EditableGanttBar
+                        key={`${t.id}-${progress}`}
+                        task={t}
+                        progress={progress}
+                        members={members}
+                        canSubmitProgress={canSubmitProgress}
+                        canReviewProgress={canReviewProgress}
+                        onChange={onProgressChange}
+                        onTaskDetailsChange={onTaskDetailsChange}
+                        onReviewProgress={onReviewProgress}
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -812,9 +1213,20 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
           {/* Legend */}
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t px-4 py-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-16 rounded-sm bg-gradient-to-r from-zinc-700 via-zinc-400 to-white" />
+              <span
+                className="h-2 w-16 rounded-sm"
+                style={{
+                  background: "linear-gradient(to right, var(--timeline-progress-start), var(--timeline-progress-end))",
+                }}
+              />
               Progress
             </span>
+            {BOARD_COLUMNS.map((column) => (
+              <span key={column.status} className="flex items-center gap-1.5">
+                <span className={`size-2 rounded-full ${TIMELINE_STATUS_DOT[column.status]}`} />
+                {column.status}
+              </span>
+            ))}
             <span className="hidden flex items-center gap-1.5">
               <span className="size-2.5 rotate-45 rounded-[2px] bg-foreground" />
               Milestone
@@ -822,6 +1234,9 @@ function GanttView({ project, tasks }: { project: Project; tasks: Task[] }) {
             <span className="flex items-center gap-1.5">
               <span className="h-3 w-0.5 bg-primary/60" />
               Today
+            </span>
+            <span className="ml-auto text-[11px]">
+              Click a bar to edit; drag its progress edge for quick changes
             </span>
           </div>
         </div>
@@ -838,11 +1253,32 @@ function MembersView({
   project,
   tasks,
   members,
+  canManageMembers,
+  candidates,
+  onAddMember,
+  onRemoveMember,
+  onUpdateMemberRole,
 }: {
   project: Project;
   tasks: Task[];
   members: TeamMember[];
+  canManageMembers: boolean;
+  candidates: Array<{ id: string; name: string; email: string }>;
+  onAddMember: (userId: string, role: "lead" | "observer" | "member") => Promise<void>;
+  onRemoveMember: (member: TeamMember) => Promise<void>;
+  onUpdateMemberRole: (member: TeamMember, role: "lead" | "observer" | "member") => Promise<void>;
 }) {
+  const [addOpen, setAddOpen] = useState(false);
+  const [userPickerOpen, setUserPickerOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedRole, setSelectedRole] = useState<"lead" | "observer" | "member">("member");
+  const [pendingRemoval, setPendingRemoval] = useState<TeamMember | null>(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{
+    member: TeamMember;
+    role: "lead" | "observer" | "member";
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const selectedUser = candidates.find((candidate) => candidate.id === selectedUserId);
   // Prefer the project's memberships from the API. They include every project
   // role (manager, lead, observer, and team member); the seeded data is only a
   // fallback for projects that are not connected to the API yet.
@@ -859,8 +1295,54 @@ function MembersView({
       (!members.length && member.id === project.lead.id),
   }));
 
+  async function addMember() {
+    if (!selectedUserId) return;
+    setSaving(true);
+    try {
+      await onAddMember(selectedUserId, selectedRole);
+      setAddOpen(false);
+      setSelectedUserId("");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeMember() {
+    if (!pendingRemoval) return;
+    setSaving(true);
+    try {
+      await onRemoveMember(pendingRemoval);
+      setPendingRemoval(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmRoleChange() {
+    if (!pendingRoleChange) return;
+    setSaving(true);
+    try {
+      await onUpdateMemberRole(pendingRoleChange.member, pendingRoleChange.role);
+      setPendingRoleChange(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update the project role.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <>
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{projectMembers.length} project members</p>
+        {canManageMembers && (
+          <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
+            <IconUserPlus className="size-4" />
+            Add member
+          </Button>
+        )}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {roster.map(({ member, lead }) => {
         const assigned = tasks.filter((t) => t.assignee.id === member.id);
         const weight = assigned.reduce((sum, task) => sum + (task.weight ?? 0), 0);
@@ -880,14 +1362,29 @@ function MembersView({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate font-medium">{member.name}</p>
-                    {member.role && (
+                    {canManageMembers && member.membershipId ? (
+                      <Select
+                        value={member.role}
+                        onValueChange={(role) => {
+                          const nextRole = role as "lead" | "observer" | "member";
+                          if (nextRole !== member.role) setPendingRoleChange({ member, role: nextRole });
+                        }}
+                      >
+                        <SelectTrigger aria-label={`Change ${member.name}'s project role`} className="h-7 w-[118px] border-primary/20 bg-primary/10 px-2 text-xs text-primary">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="lead">Lead</SelectItem>
+                          <SelectItem value="observer">Observer</SelectItem>
+                          <SelectItem value="member">Member</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : member.role && (
                       <Badge
                         variant="secondary"
                         className="bg-primary/10 text-primary"
                       >
-                        {member.role === "manager"
-                          ? "Manager"
-                          : member.role === "lead"
+                        {member.role === "lead"
                             ? "Lead"
                             : member.role === "observer"
                               ? "Observer"
@@ -899,16 +1396,21 @@ function MembersView({
                       </Badge>
                     )}
                   </div>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {member.department}
-                  </p>
                 </div>
+                {canManageMembers && member.membershipId && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => setPendingRemoval(member)}
+                    aria-label={`Remove ${member.name} from project`}
+                  >
+                    <IconTrash className="size-4" />
+                  </Button>
+                )}
               </div>
 
-              <Separator />
-
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{member.department}</span>
+              <div className="flex justify-end text-sm">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
                   <span
                     className={`size-2 rounded-full ${STATUS_STATE[member.status]}`}
@@ -933,7 +1435,114 @@ function MembersView({
           </Card>
         );
       })}
-    </div>
+      </div>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add project member</DialogTitle>
+            <DialogDescription>Add an existing user to this project and choose their role.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label htmlFor="project-member-user">User</Label>
+              <Popover open={userPickerOpen} onOpenChange={setUserPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="project-member-user"
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={userPickerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {selectedUser
+                        ? `${selectedUser.name}${selectedUser.email ? ` — ${selectedUser.email}` : ""}`
+                        : "Search users…"}
+                    </span>
+                    <IconArrowsSort className="size-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search by name or email…" />
+                    <CommandList>
+                      <CommandEmpty>No matching users.</CommandEmpty>
+                      <CommandGroup>
+                        {candidates.map((candidate) => (
+                          <CommandItem
+                            key={candidate.id}
+                            value={`${candidate.name} ${candidate.email}`}
+                            onSelect={() => {
+                              setSelectedUserId(candidate.id);
+                              setUserPickerOpen(false);
+                            }}
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm">{candidate.name}</p>
+                              {candidate.email && (
+                                <p className="truncate text-xs text-muted-foreground">{candidate.email}</p>
+                              )}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {!candidates.length && <p className="text-xs text-muted-foreground">No other active users are available.</p>}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="project-member-role">Project role</Label>
+              <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as "lead" | "observer" | "member")}>
+                <SelectTrigger id="project-member-role"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lead">Lead</SelectItem>
+                  <SelectItem value="observer">Observer</SelectItem>
+                  <SelectItem value="member">Member</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button disabled={!selectedUserId || saving} onClick={() => void addMember()}>Add member</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pendingRoleChange)}
+        onOpenChange={(open) => !open && setPendingRoleChange(null)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Change project role?</DialogTitle>
+            <DialogDescription>
+              {pendingRoleChange
+                ? `${pendingRoleChange.member.name} will change from ${pendingRoleChange.member.role} to ${pendingRoleChange.role}. Their task assignments will remain unchanged.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={saving} onClick={() => setPendingRoleChange(null)}>Cancel</Button>
+            <Button disabled={saving} onClick={() => void confirmRoleChange()}>
+              {saving ? "Updating…" : "Confirm change"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <DeleteDialog
+        open={Boolean(pendingRemoval)}
+        onOpenChange={(open) => !open && setPendingRemoval(null)}
+        name={pendingRemoval?.name ?? "member"}
+        description="This removes the person from this project only. Their account remains active and their assigned project tasks become unassigned."
+        onConfirm={removeMember}
+      />
+    </>
   );
 }
 
@@ -1060,10 +1669,13 @@ function OverviewView({
 }) {
   const doneTasks = tasks.filter((t) => t.status === "Done");
   const totalWeight = tasks.reduce((sum, task) => sum + (task.weight ?? 0), 0);
-  const approvedWeight = tasks.reduce(
+  const weightedProgressTotal = tasks.reduce(
     (sum, task) => sum + ((task.weight ?? 0) * (task.approvedProgress ?? 0)) / 100,
     0
   );
+  const weightedProgress = totalWeight
+    ? (weightedProgressTotal / totalWeight) * 100
+    : 0;
   const teamSize = new Set([
     project.lead.id,
     ...project.members.map((m) => m.id),
@@ -1089,7 +1701,7 @@ function OverviewView({
     {
       icon: IconBolt,
       label: "Weighted progress",
-      value: `${Math.round(approvedWeight)}%`,
+      value: `${Number(weightedProgress.toFixed(1))}%`,
       hint: `${totalWeight}% task weight allocated`,
     },
     {
@@ -1288,13 +1900,36 @@ export function ProjectWorkspace({
   tasks,
   members,
   actions,
-  onAddTask,
+  canSubmitProgress,
+  canReviewProgress,
+  onProgressChange,
+  onTaskDetailsChange,
+    onReviewProgress,
+    onAddTask,
+    canManageMembers,
+    memberCandidates,
+    onAddMember,
+    onRemoveMember,
+    onUpdateMemberRole,
 }: {
   project: Project;
   tasks: Task[];
   members: TeamMember[];
   actions: TaskActions;
-  onAddTask: (status: TaskStatus) => void;
+  canSubmitProgress: boolean;
+  canReviewProgress: boolean;
+  onProgressChange: (task: Task, progress: number) => Promise<void>;
+  onTaskDetailsChange: (
+    task: Task,
+    input: { title: string; status: TaskStatus; assigneeId: string; start: string; due: string; weight: number }
+  ) => Promise<void>;
+    onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
+    onAddTask: (status: TaskStatus) => void;
+    canManageMembers: boolean;
+    memberCandidates: Array<{ id: string; name: string; email: string }>;
+    onAddMember: (userId: string, role: "lead" | "observer" | "member") => Promise<void>;
+    onRemoveMember: (member: TeamMember) => Promise<void>;
+    onUpdateMemberRole: (member: TeamMember, role: "lead" | "observer" | "member") => Promise<void>;
 }) {
   const events = useMemo(() => buildActivity(project, tasks), [project, tasks]);
 
@@ -1321,10 +1956,28 @@ export function ProjectWorkspace({
         <ListView tasks={tasks} actions={actions} />
       </TabsContent>
       <TabsContent value="timeline">
-        <GanttView project={project} tasks={tasks} />
+        <GanttView
+          project={project}
+          tasks={tasks}
+          members={members}
+          canSubmitProgress={canSubmitProgress}
+          canReviewProgress={canReviewProgress}
+          onProgressChange={onProgressChange}
+          onTaskDetailsChange={onTaskDetailsChange}
+          onReviewProgress={onReviewProgress}
+        />
       </TabsContent>
       <TabsContent value="members">
-        <MembersView project={project} tasks={tasks} members={members} />
+          <MembersView
+            project={project}
+            tasks={tasks}
+            members={members}
+            canManageMembers={canManageMembers}
+            candidates={memberCandidates}
+            onAddMember={onAddMember}
+            onRemoveMember={onRemoveMember}
+            onUpdateMemberRole={onUpdateMemberRole}
+          />
       </TabsContent>
       <TabsContent value="activity">
         <Card>
