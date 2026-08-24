@@ -32,7 +32,7 @@ def can_manage_project_members(user, project):
 
 
 def can_manage_tasks(user, project):
-    return has_project_role(
+    return is_system_admin(user) or has_project_role(
         user,
         project,
         ProjectMembership.Role.LEAD,

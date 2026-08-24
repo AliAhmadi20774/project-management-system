@@ -16,7 +16,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = (
-            'id', 'name', 'description', 'status', 'start_date', 'end_date', 'created_by',
+            'id', 'name', 'code', 'category', 'description', 'status', 'start_date', 'end_date', 'created_by',
             'created_by_name', 'task_count', 'completed_task_count', 'progress', 'member_count', 'can_manage_members',
             'created_at', 'updated_at',
         )
@@ -54,21 +54,33 @@ class ProjectSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         return bool(request and can_manage_project_members(request.user, project))
 
+    def validate_code(self, value):
+        code = value.strip().upper()
+        if not code:
+            raise serializers.ValidationError('Project code is required.')
+        return code
+
 class ProjectMembershipSerializer(serializers.ModelSerializer):
     user_name = serializers.SerializerMethodField()
     user_email = serializers.EmailField(source='user.email', read_only=True)
+    user_avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ProjectMembership
-        fields = ('id', 'project', 'user', 'user_name', 'user_email', 'role', 'created_at')
-        read_only_fields = ('id', 'user_name', 'user_email', 'created_at')
+        fields = ('id', 'project', 'user', 'user_name', 'user_email', 'user_avatar_url', 'role', 'created_at')
+        read_only_fields = ('id', 'user_name', 'user_email', 'user_avatar_url', 'created_at')
 
     def get_user_name(self, membership):
         return membership.user.get_full_name() or membership.user.username
 
+    def get_user_avatar_url(self, membership):
+        from accounts.serializers import DEFAULT_AVATAR_URLS, DEFAULT_YOUNG_MAN_AVATAR_URL
+        return membership.user.avatar.url if membership.user.avatar else DEFAULT_AVATAR_URLS.get(membership.user.avatar_seed, DEFAULT_YOUNG_MAN_AVATAR_URL)
+
 
 class TaskSerializer(serializers.ModelSerializer):
     assignee_name = serializers.SerializerMethodField()
+    assignee_avatar_url = serializers.SerializerMethodField()
     reported_by_name = serializers.SerializerMethodField()
     reviewed_by_name = serializers.SerializerMethodField()
     initial_progress = serializers.IntegerField(
@@ -78,13 +90,13 @@ class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = (
-            'id', 'project', 'title', 'description', 'status', 'start_date', 'end_date', 'assignee', 'assignee_name',
+            'id', 'project', 'title', 'description', 'status', 'priority', 'start_date', 'end_date', 'assignee', 'assignee_name', 'assignee_avatar_url',
             'weight', 'initial_progress', 'reported_progress', 'approved_progress', 'progress_state', 'reported_by',
             'reported_by_name', 'reviewed_by', 'reviewed_by_name', 'review_comment',
             'created_at', 'updated_at',
         )
         read_only_fields = (
-            'id', 'reported_progress', 'approved_progress', 'progress_state', 'reported_by',
+            'id', 'assignee_name', 'assignee_avatar_url', 'reported_progress', 'approved_progress', 'progress_state', 'reported_by',
             'reported_by_name', 'reviewed_by', 'reviewed_by_name', 'review_comment',
             'created_at', 'updated_at',
         )
@@ -95,6 +107,12 @@ class TaskSerializer(serializers.ModelSerializer):
 
     def get_assignee_name(self, task):
         return self._name(task.assignee)
+
+    def get_assignee_avatar_url(self, task):
+        if not task.assignee:
+            return None
+        from accounts.serializers import DEFAULT_AVATAR_URLS, DEFAULT_YOUNG_MAN_AVATAR_URL
+        return task.assignee.avatar.url if task.assignee.avatar else DEFAULT_AVATAR_URLS.get(task.assignee.avatar_seed, DEFAULT_YOUNG_MAN_AVATAR_URL)
 
     def get_reported_by_name(self, task):
         return self._name(task.reported_by)

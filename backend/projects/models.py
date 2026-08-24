@@ -13,6 +13,8 @@ class Project(models.Model):
         COMPLETED = 'completed', 'Completed'
 
     name = models.CharField(max_length=200)
+    code = models.CharField(max_length=12, unique=True)
+    category = models.CharField(max_length=100, default='General')
     description = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status, default=Status.PLANNING)
     start_date = models.DateField(null=True, blank=True)
@@ -48,6 +50,12 @@ class ProjectMembership(models.Model):
 
 
 class Task(models.Model):
+    class Priority(models.TextChoices):
+        LOW = 'low', 'Low'
+        MEDIUM = 'medium', 'Medium'
+        HIGH = 'high', 'High'
+        URGENT = 'urgent', 'Urgent'
+
     class Status(models.TextChoices):
         BACKLOG = 'backlog', 'Backlog'
         TODO = 'todo', 'To do'
@@ -65,6 +73,7 @@ class Task(models.Model):
     title = models.CharField(max_length=250)
     description = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status, default=Status.TODO)
+    priority = models.CharField(max_length=20, choices=Priority, default=Priority.MEDIUM)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     assignee = models.ForeignKey(
