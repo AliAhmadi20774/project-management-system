@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,6 +81,20 @@ const WORKSPACE_TASK_STATUS: Record<string, TaskStatus> = {
   in_progress: "In Progress",
   in_review: "In Review",
   done: "Done",
+};
+
+const WORKSPACE_TASK_PRIORITY: Record<string, TaskPriority> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+};
+
+const API_TASK_PRIORITY: Record<TaskPriority, "low" | "medium" | "high" | "urgent"> = {
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+  Urgent: "urgent",
 };
 
 function getBackendProjectId(projectId: string) {
@@ -313,6 +328,91 @@ function AddTaskDialog({
   );
 }
 
+function EditTaskDialog({
+  task,
+  roster,
+  open,
+  onOpenChange,
+  onSave,
+  isSystemAdmin,
+}: {
+  task: Task | null;
+  roster: TeamMember[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (task: Task, input: NewTaskInput) => Promise<void>;
+  isSystemAdmin: boolean;
+}) {
+  const [title, setTitle] = useState("");
+  const [status, setStatus] = useState<TaskStatus>("Todo");
+  const [priority, setPriority] = useState<TaskPriority>("Medium");
+  const [assigneeId, setAssigneeId] = useState("unassigned");
+  const [weight, setWeight] = useState(1);
+  const [progress, setProgress] = useState(0);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!task || !open) return;
+    setTitle(task.title);
+    setStatus(task.status);
+    setPriority(task.priority);
+    setAssigneeId(task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id);
+    setWeight(task.weight ?? 1);
+    setProgress(task.reportedProgress ?? task.approvedProgress ?? 0);
+    setStartDate(task.start);
+    setEndDate(task.due);
+  }, [task, open]);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!task || !title.trim()) return toast.error("Task title is required.");
+    if (startDate && endDate && endDate < startDate) return toast.error("End date must be on or after the start date.");
+    if (!Number.isInteger(weight) || weight < 1 || weight > 100) return toast.error("Weight must be between 1% and 100%.");
+    if (!Number.isInteger(progress) || progress < 0 || progress > 100) return toast.error("Progress must be between 0% and 100%.");
+    setSaving(true);
+    try {
+      await onSave(task, { title: title.trim(), status, priority, assigneeId, weight, progress, startDate, endDate });
+      onOpenChange(false);
+      toast.success("Task updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update task.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <form onSubmit={submit}>
+          <DialogHeader><DialogTitle>Edit task</DialogTitle><DialogDescription>Update this task&apos;s details and progress.</DialogDescription></DialogHeader>
+          <div className="grid gap-3 py-4 sm:grid-cols-2">
+            <div className="grid gap-2 sm:col-span-2"><Label>Title</Label><Input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus /></div>
+            <div className="grid gap-2"><Label>Status</Label><Select value={status} onValueChange={(value) => setStatus(value as TaskStatus)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_STATUSES.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-2"><Label>Priority</Label><Select value={priority} onValueChange={(value) => setPriority(value as TaskPriority)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_PRIORITIES.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-2"><Label>Assignee</Label><Select value={assigneeId} onValueChange={setAssigneeId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="unassigned">Unassigned</SelectItem>{roster.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-2"><Label>Weight (%)</Label><Input type="number" min="1" max="100" value={weight} onChange={(event) => setWeight(Number(event.target.value))} /></div>
+            <div className="grid gap-2"><Label>Start date</Label><Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></div>
+            <div className="grid gap-2"><Label>End date</Label><Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></div>
+            <div className="grid gap-2 sm:col-span-2">
+              <Label>Task progress (%)</Label>
+              <Input type="number" min="0" max="100" value={progress} onChange={(event) => setProgress(Number(event.target.value))} />
+              <p className="text-xs text-muted-foreground">
+                {isSystemAdmin
+                  ? "System administrator updates are approved immediately."
+                  : "This value is submitted to the project observer and does not affect project progress until approved."}
+              </p>
+            </div>
+          </div>
+          <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Updating..." : "Update task"}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Detail view (header + interactive workspace)
 // ---------------------------------------------------------------------------
@@ -333,6 +433,7 @@ export function ProjectDetail({ project }: { project: Project }) {
   const [addStatus, setAddStatus] = useState<TaskStatus>("Todo");
   const [addStatusLocked, setAddStatusLocked] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   useEffect(() => {
     const backendProjectId = getBackendProjectId(project.id);
@@ -357,14 +458,14 @@ export function ProjectDetail({ project }: { project: Project }) {
         if (!projectResponse.ok) throw new Error(projectData.detail || "Could not load project progress.");
 
         const memberships = Array.isArray(membersData) ? membersData : membersData.results || [];
-        const members: TeamMember[] = memberships.map((item: { id: number; user: number; user_name: string; user_email: string; role: string }) => ({
+        const members: TeamMember[] = memberships.map((item: { id: number; user: number; user_name: string; user_email: string; user_avatar_url?: string; role: string }) => ({
           membershipId: item.id,
           id: String(item.user),
           name: item.user_name,
           role: item.role,
           department: "Project",
           email: item.user_email,
-          avatar: "",
+          avatar: item.user_avatar_url || "/avatars/default-young-man.png",
           status: "Active",
           location: "",
         }));
@@ -372,13 +473,22 @@ export function ProjectDetail({ project }: { project: Project }) {
         if (cancelled) return;
 
         setRoster(members);
-        setTasks(items.map((item: { id: number; title: string; status: string; assignee: number | null; start_date: string | null; end_date: string | null; weight: number; approved_progress: number; reported_progress: number; progress_state: Task["progressState"] }) => ({
+        setTasks(items.map((item: { id: number; title: string; status: string; priority: string; assignee: number | null; assignee_name: string | null; assignee_avatar_url: string | null; start_date: string | null; end_date: string | null; weight: number; approved_progress: number; reported_progress: number; progress_state: Task["progressState"] }) => ({
           id: `${project.key}-${item.id}`,
           backendId: item.id,
           title: item.title,
           status: WORKSPACE_TASK_STATUS[item.status] || "Todo",
-          priority: "Medium",
-          assignee: members.find((member) => member.id === String(item.assignee)) ?? {
+          priority: WORKSPACE_TASK_PRIORITY[item.priority] || "Medium",
+          assignee: members.find((member) => member.id === String(item.assignee)) ?? (item.assignee ? {
+            id: String(item.assignee),
+            name: item.assignee_name || "Unknown user",
+            role: "",
+            department: "",
+            email: "",
+            avatar: item.assignee_avatar_url || "/avatars/default-young-man.png",
+            status: "Active",
+            location: "",
+          } : {
             id: `unassigned-${item.id}`,
             name: "Unassigned",
             role: "",
@@ -387,7 +497,7 @@ export function ProjectDetail({ project }: { project: Project }) {
             avatar: "",
             status: "Offline",
             location: "",
-          },
+          }),
           labels: [],
           projectId: project.id,
           start: item.start_date || project.start,
@@ -461,6 +571,7 @@ export function ProjectDetail({ project }: { project: Project }) {
           project: backendProjectId,
           title: input.title,
           status: API_TASK_STATUS[input.status],
+          priority: API_TASK_PRIORITY[input.priority],
           assignee: input.assigneeId === "unassigned" ? null : Number(input.assigneeId),
           weight: input.weight,
           initial_progress: input.progress,
@@ -514,9 +625,21 @@ export function ProjectDetail({ project }: { project: Project }) {
     }
   }
 
+  const currentRoles = roster
+    .filter((member) => member.id === String(user?.id))
+    .map((member) => member.role);
+  const isSystemAdmin = Boolean(user?.is_superuser);
+  const canSubmitProgress = isSystemAdmin || currentRoles.includes("lead");
+  const canReviewProgress = isSystemAdmin || currentRoles.includes("observer");
+
   const actions: TaskActions = {
-    onOpen: (task) =>
-      toast(`Opening ${task.id}`, { description: task.title }),
+    onOpen: (task) => {
+      if (!canSubmitProgress) {
+        toast.error("Only the project lead or system administrator can edit tasks.");
+        return;
+      }
+      setEditingTask(task);
+    },
     onDuplicate: (task) => {
       const id = `${project.key}-${idRef.current++}`;
       setTasks((prev) => [
@@ -585,6 +708,7 @@ export function ProjectDetail({ project }: { project: Project }) {
     input: {
       title: string;
       status: TaskStatus;
+      priority: TaskPriority;
       assigneeId: string;
       start: string;
       due: string;
@@ -598,6 +722,7 @@ export function ProjectDetail({ project }: { project: Project }) {
       body: JSON.stringify({
         title: input.title,
         status: API_TASK_STATUS[input.status],
+        priority: API_TASK_PRIORITY[input.priority],
         assignee: input.assigneeId === "unassigned" ? null : Number(input.assigneeId),
         start_date: input.start || null,
         end_date: input.due || null,
@@ -615,6 +740,7 @@ export function ProjectDetail({ project }: { project: Project }) {
               ...item,
               title: data.title,
               status: WORKSPACE_TASK_STATUS[data.status] || input.status,
+              priority: WORKSPACE_TASK_PRIORITY[data.priority] || input.priority,
               start: data.start_date || project.start,
               due: data.end_date || project.due,
               weight: data.weight,
@@ -747,13 +873,6 @@ export function ProjectDetail({ project }: { project: Project }) {
     toast.success("Project role updated", { description: `${member.name} is now ${data.role}.` });
   }
 
-  const currentRoles = roster
-    .filter((member) => member.id === String(user?.id))
-    .map((member) => member.role);
-  const isSystemAdmin = Boolean(user?.is_superuser);
-  const canSubmitProgress = isSystemAdmin || currentRoles.includes("lead");
-  const canReviewProgress = isSystemAdmin || currentRoles.includes("observer");
-
   const shown = roster.slice(0, 5);
   const extra = roster.length - shown.length;
   const projectWithProgress = {
@@ -807,7 +926,7 @@ export function ProjectDetail({ project }: { project: Project }) {
                 <span>{project.category}</span>
                 <span>·</span>
                 <span className="tabular-nums">
-                  {project.taskCounts.done}/{project.taskCounts.total} tasks done
+                  {projectTaskCounts.done}/{projectTaskCounts.total} tasks done
                 </span>
               </div>
             </div>
@@ -816,12 +935,17 @@ export function ProjectDetail({ project }: { project: Project }) {
           <div className="flex flex-wrap items-center gap-2">
             <div className="mr-1 flex items-center -space-x-2">
               {shown.map((m) => (
-                <Avatar key={m.id} className="size-8 ring-2 ring-background">
-                  <AvatarImage src={m.avatar} alt={m.name} />
-                  <AvatarFallback className="text-[10px]">
-                    {initials(m.name)}
-                  </AvatarFallback>
-                </Avatar>
+                <Tooltip key={m.id}>
+                  <TooltipTrigger asChild>
+                    <Link href={`/profile?user=${m.id}`} aria-label={`Open ${m.name}'s profile`}>
+                      <Avatar className="size-8 ring-2 ring-background transition-transform hover:scale-110">
+                        <AvatarImage src={m.avatar || "/avatars/default-young-man.png"} alt={m.name} />
+                        <AvatarFallback className="text-[10px]">{initials(m.name)}</AvatarFallback>
+                      </Avatar>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent>{m.name} · {m.role}</TooltipContent>
+                </Tooltip>
               ))}
               {extra > 0 && (
                 <span className="flex size-8 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-background">
@@ -929,6 +1053,30 @@ export function ProjectDetail({ project }: { project: Project }) {
         statusLocked={addStatusLocked}
         roster={roster}
         onCreate={createTask}
+      />
+
+      <EditTaskDialog
+        task={editingTask}
+        roster={roster}
+        isSystemAdmin={isSystemAdmin}
+        open={editingTask !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingTask(null);
+        }}
+        onSave={async (task, input) => {
+          await updateTaskDetails(task, {
+            title: input.title,
+            status: input.status,
+            priority: input.priority,
+            assigneeId: input.assigneeId,
+            start: input.startDate,
+            due: input.endDate,
+            weight: input.weight,
+          });
+          if (input.progress !== (task.reportedProgress ?? task.approvedProgress ?? 0)) {
+            await updateTaskProgress(task, input.progress);
+          }
+        }}
       />
 
       <DeleteDialog

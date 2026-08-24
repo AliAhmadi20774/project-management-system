@@ -88,11 +88,19 @@ const API_PROJECT_STATUS: Record<string, ProjectStatus> = {
   completed: "Completed",
 };
 
+const PROJECT_STATUS_API: Record<ProjectStatus, "planning" | "active" | "on_hold" | "completed"> = {
+  "On Track": "active",
+  "At Risk": "on_hold",
+  Delayed: "on_hold",
+  Completed: "completed",
+};
+
 type ApiMembership = {
   user: number;
   user_name: string;
   user_email: string;
   role: string;
+  user_avatar_url: string;
 };
 
 function toProjectMember(membership: ApiMembership): TeamMember {
@@ -103,7 +111,7 @@ function toProjectMember(membership: ApiMembership): TeamMember {
     email: membership.user_email,
     role: membership.role,
     department: knownMember?.department ?? "Project",
-    avatar: knownMember?.avatar ?? "",
+    avatar: membership.user_avatar_url ?? knownMember?.avatar ?? "/avatars/default-young-man.png",
     status: knownMember?.status ?? "Active",
     location: knownMember?.location ?? "",
   };
@@ -140,6 +148,7 @@ function AvatarStack({
   lead: TeamMember;
   max?: number;
 }) {
+  const router = useRouter();
   // Lead first, then the rest, de-duplicated.
   const people = [lead, ...members.filter((m) => m.id !== lead.id)];
   const shown = people.slice(0, max);
@@ -149,12 +158,12 @@ function AvatarStack({
       {shown.map((m, i) => (
         <Tooltip key={m.id}>
           <TooltipTrigger asChild>
-            <Avatar className="size-7 ring-2 ring-card">
-              <AvatarImage src={m.avatar} alt={m.name} />
-              <AvatarFallback className="text-[10px]">
-                {initials(m.name)}
-              </AvatarFallback>
-            </Avatar>
+            <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); router.push(`/profile?user=${m.id}`); }} aria-label={`Open ${m.name}'s profile`}>
+              <Avatar className="size-7 ring-2 ring-card">
+                <AvatarImage src={m.avatar} alt={m.name} />
+                <AvatarFallback className="text-[10px]">{initials(m.name)}</AvatarFallback>
+              </Avatar>
+            </button>
           </TooltipTrigger>
           <TooltipContent>
             {m.name}
@@ -397,7 +406,7 @@ function AddProjectDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (input: NewProjectInput) => void;
+  onCreate: (input: NewProjectInput) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
@@ -417,23 +426,19 @@ function AddProjectDialog({
     }
   }, [open]);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
       toast.error("Project name is required");
       return;
     }
-    const derivedKey =
-      key.trim() ||
-      name
-        .trim()
-        .replace(/[^a-zA-Z]/g, "")
-        .slice(0, 3)
-        .toUpperCase() ||
-      "PRJ";
-    onCreate({
+    if (!key.trim()) {
+      toast.error("Project code is required");
+      return;
+    }
+    await onCreate({
       name: name.trim(),
-      key: derivedKey.toUpperCase(),
+      key: key.trim().toUpperCase(),
       category,
       status,
       leadId,
@@ -467,13 +472,13 @@ function AddProjectDialog({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="project-key">Key</Label>
+                <Label htmlFor="project-key">Project code</Label>
                 <Input
                   id="project-key"
                   value={key}
                   onChange={(e) => setKey(e.target.value.toUpperCase())}
                   placeholder="MOB"
-                  maxLength={5}
+                  maxLength={12}
                 />
               </div>
             </div>
@@ -574,7 +579,8 @@ export default function ProjectsPage() {
         const response = await fetch("/api/projects", { cache: "no-store" });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Could not load projects.");
-        const apiProjects = Array.isArray(data) ? data : data.results || [];
+        const apiProjects: Array<{ id: number; name: string; code: string; category: string; progress: number; status: string; task_count: number; completed_task_count: number }> =
+          Array.isArray(data) ? data : data.results || [];
         const membershipEntries = await Promise.all(apiProjects.map(async (apiProject: { id: number }) => {
           const membersResponse = await fetch(`/api/project-memberships?project=${apiProject.id}`, { cache: "no-store" });
           const membersData = await membersResponse.json();
@@ -582,7 +588,7 @@ export default function ProjectsPage() {
           const memberships = Array.isArray(membersData) ? membersData : membersData.results || [];
           return [apiProject.id, memberships as ApiMembership[]] as const;
         }));
-        const membershipsByProject = new Map(membershipEntries);
+        const membershipsByProject = new Map<number, ApiMembership[]>(membershipEntries);
         if (cancelled) return;
 
         setItems((current) => current.map((project) => {
@@ -594,6 +600,8 @@ export default function ProjectsPage() {
             ?? project.lead;
           return {
             ...project,
+            key: apiProject.code || project.key,
+            category: apiProject.category || project.category,
             progress: apiProject.progress,
             status: API_PROJECT_STATUS[apiProject.status] ?? project.status,
             taskCounts: {
@@ -615,22 +623,39 @@ export default function ProjectsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  function createProject(input: NewProjectInput) {
+  async function createProject(input: NewProjectInput) {
     const lead = team.find((m) => m.id === input.leadId) ?? team[0];
     const now = Date.now();
+    const response = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: input.name,
+        code: input.key,
+        category: input.category,
+        description: input.description,
+        status: PROJECT_STATUS_API[input.status],
+        start_date: new Date(now).toISOString().slice(0, 10),
+        end_date: new Date(now + 90 * 86_400_000).toISOString().slice(0, 10),
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(typeof data.detail === "string" ? data.detail : "Could not create project.");
+    }
     const project: Project = {
-      id: `PRJ-${idRef.current++}`,
-      name: input.name,
-      key: input.key,
-      description: input.description,
-      status: input.status,
+      id: `PRJ-${data.id + 100}`,
+      name: data.name,
+      key: data.code,
+      description: data.description,
+      status: API_PROJECT_STATUS[data.status] ?? input.status,
       progress: 0,
       color: "",
-      category: input.category,
+      category: data.category,
       lead,
       members: [lead],
-      start: new Date(now).toISOString().slice(0, 10),
-      due: new Date(now + 90 * 86_400_000).toISOString().slice(0, 10),
+      start: data.start_date,
+      due: data.end_date,
       budget: 50_000,
       spent: 0,
       taskCounts: { total: 0, done: 0 },
