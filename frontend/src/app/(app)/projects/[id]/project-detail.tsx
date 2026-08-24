@@ -417,18 +417,19 @@ function EditTaskDialog({
 // Detail view (header + interactive workspace)
 // ---------------------------------------------------------------------------
 
-export function ProjectDetail({ project }: { project: Project }) {
+export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "overview" }: { project: Project; initialWorkspaceTab?: "overview" | "members" }) {
   const { user } = useAuth();
+  const [liveProject, setLiveProject] = useState<Project | null>(null);
   const [roster, setRoster] = useState<TeamMember[]>([]);
   const [canManageMembers, setCanManageMembers] = useState(false);
   const [memberCandidates, setMemberCandidates] = useState<Array<{ id: string; name: string; email: string }>>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [projectProgress, setProjectProgress] = useState(project.progress);
-  const [projectTaskCounts, setProjectTaskCounts] = useState(project.taskCounts);
+  const [projectProgress, setProjectProgress] = useState(seedProject.progress);
+  const [projectTaskCounts, setProjectTaskCounts] = useState(seedProject.taskCounts);
   const idRef = useRef(1000);
 
-  const [starred, setStarred] = useState(false);
+  const [starred, setStarred] = useState(Boolean(seedProject.starred));
   const [addOpen, setAddOpen] = useState(false);
   const [addStatus, setAddStatus] = useState<TaskStatus>("Todo");
   const [addStatusLocked, setAddStatusLocked] = useState(false);
@@ -436,12 +437,13 @@ export function ProjectDetail({ project }: { project: Project }) {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   useEffect(() => {
-    const backendProjectId = getBackendProjectId(project.id);
+    const backendProjectId = getBackendProjectId(seedProject.id);
     if (!backendProjectId) return;
     let cancelled = false;
 
     async function loadProjectTeamAndTasks() {
       setMembersLoaded(false);
+      setLiveProject(null);
       try {
         const [membersResponse, tasksResponse, projectResponse] = await Promise.all([
           fetch(`/api/project-memberships?project=${backendProjectId}`, { cache: "no-store" }),
@@ -474,7 +476,7 @@ export function ProjectDetail({ project }: { project: Project }) {
 
         setRoster(members);
         setTasks(items.map((item: { id: number; title: string; status: string; priority: string; assignee: number | null; assignee_name: string | null; assignee_avatar_url: string | null; start_date: string | null; end_date: string | null; weight: number; approved_progress: number; reported_progress: number; progress_state: Task["progressState"] }) => ({
-          id: `${project.key}-${item.id}`,
+          id: `${seedProject.key}-${item.id}`,
           backendId: item.id,
           title: item.title,
           status: WORKSPACE_TASK_STATUS[item.status] || "Todo",
@@ -499,9 +501,9 @@ export function ProjectDetail({ project }: { project: Project }) {
             location: "",
           }),
           labels: [],
-          projectId: project.id,
-          start: item.start_date || project.start,
-          due: item.end_date || project.due,
+          projectId: seedProject.id,
+          start: item.start_date || "",
+          due: item.end_date || "",
           points: 3,
           weight: item.weight,
           approvedProgress: item.approved_progress,
@@ -514,6 +516,35 @@ export function ProjectDetail({ project }: { project: Project }) {
         setProjectTaskCounts({
           total: projectData.task_count,
           done: projectData.completed_task_count,
+        });
+        setStarred(Boolean(projectData.is_starred));
+        const projectLead = members.find((member) => member.role === "lead") ?? members[0] ?? {
+          id: "unassigned",
+          name: "Unassigned",
+          role: "",
+          department: "",
+          email: "",
+          avatar: "/avatars/default-young-man.png",
+          status: "Offline" as const,
+          location: "",
+        };
+        setLiveProject({
+          ...seedProject,
+          name: projectData.name,
+          key: projectData.code,
+          description: projectData.description,
+          category: projectData.category || "General",
+          status: projectData.status === "completed" ? "Completed" : projectData.status === "on_hold" ? "At Risk" : "On Track",
+          progress: projectData.progress,
+          start: projectData.start_date || "",
+          due: projectData.end_date || "",
+          taskCounts: { total: projectData.task_count, done: projectData.completed_task_count },
+          lead: projectLead,
+          members,
+          budget: 0,
+          spent: 0,
+          milestones: [],
+          starred: Boolean(projectData.is_starred),
         });
         const mayManageMembers = Boolean(projectData.can_manage_members);
         setCanManageMembers(mayManageMembers);
@@ -544,7 +575,9 @@ export function ProjectDetail({ project }: { project: Project }) {
     return () => {
       cancelled = true;
     };
-  }, [project]);
+  }, [seedProject]);
+
+  const project = liveProject;
 
   function openAddTask(status: TaskStatus, statusLocked = false) {
     if (!membersLoaded) {
@@ -640,13 +673,42 @@ export function ProjectDetail({ project }: { project: Project }) {
       }
       setEditingTask(task);
     },
-    onDuplicate: (task) => {
-      const id = `${project.key}-${idRef.current++}`;
-      setTasks((prev) => [
-        { ...task, id, title: `${task.title} (copy)` },
-        ...prev,
-      ]);
-      toast.success("Task duplicated", { description: id });
+    onDuplicate: async (task) => {
+      if (!canSubmitProgress) {
+        toast.error("Only the project lead or system administrator can duplicate tasks.");
+        return;
+      }
+      if (!task.backendId) throw new Error("This task is not connected to the API.");
+      const response = await fetch(`/api/tasks/${task.backendId}?action=duplicate`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Could not duplicate task.");
+      const assignee = roster.find((member) => member.id === String(data.assignee)) ?? {
+        id: `unassigned-${data.id}`,
+        name: "Unassigned",
+        role: "",
+        department: "",
+        email: "",
+        avatar: "",
+        status: "Offline" as const,
+        location: "",
+      };
+      const copy: Task = {
+        ...task,
+        id: `${project.key}-${data.id}`,
+        backendId: data.id,
+        title: data.title,
+        status: WORKSPACE_TASK_STATUS[data.status] || "Todo",
+        priority: WORKSPACE_TASK_PRIORITY[data.priority] || task.priority,
+        assignee,
+        start: data.start_date || project.start,
+        due: data.end_date || project.due,
+        weight: data.weight,
+        approvedProgress: data.approved_progress,
+        reportedProgress: data.reported_progress,
+        progressState: data.progress_state,
+      };
+      setTasks((current) => [copy, ...current]);
+      toast.success("Task duplicated", { description: `${copy.id} created with ${copy.weight}% weight.` });
     },
     onDelete: (task) => setPendingDelete(task),
   };
@@ -873,6 +935,14 @@ export function ProjectDetail({ project }: { project: Project }) {
     toast.success("Project role updated", { description: `${member.name} is now ${data.role}.` });
   }
 
+  if (!project) {
+    return (
+      <div className="flex min-h-72 items-center justify-center text-sm text-muted-foreground">
+        Loading project…
+      </div>
+    );
+  }
+
   const shown = roster.slice(0, 5);
   const extra = roster.length - shown.length;
   const projectWithProgress = {
@@ -908,9 +978,7 @@ export function ProjectDetail({ project }: { project: Project }) {
                   {project.key}
                 </span>
                 <Badge variant="secondary" className="gap-1.5 font-medium">
-                  <span
-                    className={`size-1.5 rounded-full ${STATUS_DOT[project.status]}`}
-                  />
+                  <span className={`size-1.5 rounded-full ${STATUS_DOT[project.status]}`} />
                   {project.status}
                 </Badge>
               </div>
@@ -957,15 +1025,22 @@ export function ProjectDetail({ project }: { project: Project }) {
               variant="outline"
               size="icon"
               className="size-9"
-              onClick={() => {
-                setStarred((s) => {
-                  const next = !s;
-                  toast.success(
-                    next ? "Added to starred" : "Removed from starred",
-                    { description: project.name }
-                  );
-                  return next;
-                });
+              onClick={async () => {
+                const backendProjectId = getBackendProjectId(project.id);
+                if (!backendProjectId) return;
+                const next = !starred;
+                try {
+                  const response = await fetch(`/api/projects/${backendProjectId}/favorite`, {
+                    method: next ? "POST" : "DELETE",
+                  });
+                  if (!response.ok) throw new Error("Could not update starred projects.");
+                  setStarred(next);
+                  toast.success(next ? "Added to starred" : "Removed from starred", {
+                    description: project.name,
+                  });
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not update starred projects.");
+                }
               }}
               aria-pressed={starred}
             >
@@ -1019,19 +1094,17 @@ export function ProjectDetail({ project }: { project: Project }) {
               style={{ width: `${projectWithProgress.progress}%` }}
             />
           </div>
-          <span
-            className={`hidden size-2.5 rounded-full sm:block ${STATUS_DOT[project.status]}`}
-          />
-          <span className="hidden text-sm text-muted-foreground sm:block">
-            {project.status}
-          </span>
+          <span className={`hidden size-2.5 rounded-full sm:block ${STATUS_DOT[project.status]}`} />
+          <span className="hidden text-sm text-muted-foreground sm:block">{project.status}</span>
         </div>
       </div>
 
       <ProjectWorkspace
         project={projectWithProgress}
+        initialTab={initialWorkspaceTab}
         tasks={tasks}
         members={roster}
+        membersLoaded={membersLoaded}
         actions={actions}
         canSubmitProgress={canSubmitProgress}
         canReviewProgress={canReviewProgress}

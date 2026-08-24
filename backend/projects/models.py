@@ -49,6 +49,20 @@ class ProjectMembership(models.Model):
         return f'{self.user} — {self.project} ({self.get_role_display()})'
 
 
+class ProjectFavorite(models.Model):
+    """A project bookmark belonging to one user."""
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='favorites')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='favorite_projects')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+        constraints = [
+            models.UniqueConstraint(fields=('project', 'user'), name='unique_project_favorite'),
+        ]
+
+
 class Task(models.Model):
     class Priority(models.TextChoices):
         LOW = 'low', 'Low'

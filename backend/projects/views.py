@@ -4,8 +4,9 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+from django.db.models import Sum
 
-from .models import Project, ProjectMembership, Task, TimeEntry
+from .models import Project, ProjectFavorite, ProjectMembership, Task, TimeEntry
 from .permissions import can_create_projects, can_log_time, can_manage_project, can_manage_project_members, can_manage_tasks, can_review_progress, can_submit_progress, is_system_admin
 from .serializers import ProgressReviewSerializer, ProgressSubmissionSerializer, ProjectMembershipSerializer, ProjectSerializer, TaskSerializer, TimeEntrySerializer
 
@@ -30,6 +31,14 @@ class ProjectViewSet(ModelViewSet):
             raise PermissionDenied('Only the project manager can delete this project.')
         instance.delete()
 
+    @action(detail=True, methods=('post', 'delete'), url_path='favorite')
+    def favorite(self, request, pk=None):
+        project = self.get_object()
+        if request.method == 'POST':
+            ProjectFavorite.objects.get_or_create(project=project, user=request.user)
+            return Response({'is_starred': True})
+        ProjectFavorite.objects.filter(project=project, user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 class ProjectMembershipViewSet(ModelViewSet):
     queryset = ProjectMembership.objects.select_related('project', 'user').all()
@@ -111,6 +120,33 @@ class TaskViewSet(ModelViewSet):
         if not can_manage_tasks(self.request.user, instance.project):
             raise PermissionDenied('Only the project lead or project manager can delete tasks.')
         instance.delete()
+
+    @action(detail=True, methods=('post',), url_path='duplicate')
+    def duplicate(self, request, pk=None):
+        task = self.get_object()
+        if not can_manage_tasks(request.user, task.project):
+            raise PermissionDenied('Only the project lead or system administrator can duplicate tasks.')
+
+        allocated_weight = Task.objects.filter(project=task.project).aggregate(total=Sum('weight'))['total'] or 0
+        available_weight = 100 - allocated_weight
+        if available_weight < 1:
+            return Response(
+                {'detail': 'No project weight is available. Reduce another task weight before duplicating this task.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        duplicate = Task.objects.create(
+            project=task.project,
+            title=f'{task.title} (copy)'[:250],
+            description=task.description,
+            status=Task.Status.TODO,
+            priority=task.priority,
+            start_date=task.start_date,
+            end_date=task.end_date,
+            assignee=task.assignee,
+            weight=min(task.weight, available_weight),
+        )
+        return Response(TaskSerializer(duplicate, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=('post',), url_path='submit-progress')
     def submit_progress(self, request, pk=None):

@@ -11,12 +11,15 @@ export function generateStaticParams() {
 
 export default async function ProjectDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
+  const { tab } = await searchParams;
   const project: Project | undefined = getProjectById(id);
   if (!project) notFound();
 
-  return <ProjectDetail project={project} />;
+  return <ProjectDetail project={project} initialWorkspaceTab={tab === "members" ? "members" : "overview"} />;
 }

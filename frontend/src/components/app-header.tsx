@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
+  BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
@@ -60,11 +61,12 @@ const CRUMB_LABELS: Record<string, string> = {
 function useBreadcrumb() {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
-  return segments.map(
-    (s) =>
-      CRUMB_LABELS[s] ??
-      s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-  );
+  return segments.map((segment, index) => ({
+    label:
+      CRUMB_LABELS[segment] ??
+      segment.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    href: `/${segments.slice(0, index + 1).join("/")}`,
+  }));
 }
 
 export function AppHeader() {
@@ -98,16 +100,16 @@ export function AppHeader() {
       <div className="mr-1 h-5 w-px shrink-0 self-center bg-border" />
       <Breadcrumb className="hidden sm:block">
         <BreadcrumbList>
-          {crumbs.map((c, i) => (
+          {crumbs.map((crumb, i) => (
             <React.Fragment key={i}>
               <BreadcrumbItem>
-                <BreadcrumbPage
-                  className={
-                    i < crumbs.length - 1 ? "text-muted-foreground" : ""
-                  }
-                >
-                  {c}
-                </BreadcrumbPage>
+                {i < crumbs.length - 1 ? (
+                  <BreadcrumbLink asChild>
+                    <Link href={crumb.href}>{crumb.label}</Link>
+                  </BreadcrumbLink>
+                ) : (
+                  <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                )}
               </BreadcrumbItem>
               {i < crumbs.length - 1 && <BreadcrumbSeparator />}
             </React.Fragment>
@@ -240,6 +242,7 @@ function UserMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="h-9 gap-2 px-1.5">
           <Avatar className="size-7">
+            <AvatarImage src={user.avatar_url || "/avatars/default-young-man.png"} alt={name} />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <span className="hidden text-sm font-medium lg:inline">
@@ -250,6 +253,7 @@ function UserMenu() {
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="flex items-center gap-2">
           <Avatar className="size-8 shrink-0">
+            <AvatarImage src={user.avatar_url || "/avatars/default-young-man.png"} alt={name} />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="grid min-w-0">

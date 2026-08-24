@@ -362,7 +362,7 @@ function TaskLabels({ labels }: { labels: string[] }) {
 
 export type TaskActions = {
   onOpen: (task: Task) => void;
-  onDuplicate: (task: Task) => void;
+  onDuplicate: (task: Task) => Promise<void>;
   onDelete: (task: Task) => void;
 };
 
@@ -391,7 +391,11 @@ function TaskMenu({
         <DropdownMenuItem onSelect={() => actions.onOpen(task)}>
           <IconExternalLink className="size-4" /> Edit task
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => actions.onDuplicate(task)}>
+        <DropdownMenuItem onSelect={() => {
+          void actions.onDuplicate(task).catch((error) => {
+            toast.error(error instanceof Error ? error.message : "Could not duplicate task.");
+          });
+        }}>
           <IconCopy className="size-4" /> Duplicate
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -1299,18 +1303,18 @@ function GanttView({
 // ---------------------------------------------------------------------------
 
 function MembersView({
-  project,
   tasks,
   members,
+  membersLoaded,
   canManageMembers,
   candidates,
   onAddMember,
   onRemoveMember,
   onUpdateMemberRole,
 }: {
-  project: Project;
   tasks: Task[];
   members: TeamMember[];
+  membersLoaded: boolean;
   canManageMembers: boolean;
   candidates: Array<{ id: string; name: string; email: string }>;
   onAddMember: (userId: string, role: "lead" | "observer" | "member") => Promise<void>;
@@ -1328,20 +1332,10 @@ function MembersView({
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const selectedUser = candidates.find((candidate) => candidate.id === selectedUserId);
-  // Prefer the project's memberships from the API. They include every project
-  // role (manager, lead, observer, and team member); the seeded data is only a
-  // fallback for projects that are not connected to the API yet.
-  const projectMembers = members.length
-    ? members
-    : [
-        project.lead,
-        ...project.members.filter((member) => member.id !== project.lead.id),
-      ];
+  const projectMembers = members;
   const roster = projectMembers.map((member) => ({
     member,
-    lead:
-      member.role.toLowerCase() === "lead" ||
-      (!members.length && member.id === project.lead.id),
+    lead: member.role.toLowerCase() === "lead",
   }));
 
   async function addMember() {
@@ -1383,7 +1377,9 @@ function MembersView({
   return (
     <>
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{projectMembers.length} project members</p>
+        <p className="text-sm text-muted-foreground">
+          {membersLoaded ? `${projectMembers.length} project members` : "Loading project members…"}
+        </p>
         {canManageMembers && (
           <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
             <IconUserPlus className="size-4" />
@@ -1391,6 +1387,11 @@ function MembersView({
           </Button>
         )}
       </div>
+      {membersLoaded && roster.length === 0 ? (
+        <div className="rounded-xl border border-dashed px-5 py-10 text-center text-sm text-muted-foreground">
+          No members have been added to this project yet.
+        </div>
+      ) : (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {roster.map(({ member, lead }) => {
         const assigned = tasks.filter((t) => t.assignee.id === member.id);
@@ -1485,6 +1486,7 @@ function MembersView({
         );
       })}
       </div>
+      )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-sm">
@@ -1607,78 +1609,15 @@ type ActivityEvent = {
   time: string;
 };
 
-function buildActivity(project: Project, tasks: Task[]): ActivityEvent[] {
-  const roster = [project.lead, ...project.members];
-  const pickMember = (i: number) => roster[i % roster.length];
-  const done = tasks.filter((t) => t.status === "Done");
-  const review = tasks.filter((t) => t.status === "In Review");
-  const inprog = tasks.filter((t) => t.status === "In Progress");
-  const doneMs = project.milestones.filter((m) => m.done);
-
-  const t = (arr: Task[], i: number, fb = 0) =>
-    (arr[i] ?? tasks[fb])?.title ?? "a task";
-
-  return [
-    {
-      actor: pickMember(2),
-      verb: "moved",
-      target: t(review, 0),
-      suffix: "to In Review",
-      time: "24m ago",
-    },
-    {
-      actor: pickMember(0),
-      verb: "completed",
-      target: t(done, 0, 1),
-      time: "1h ago",
-    },
-    {
-      actor: pickMember(1),
-      verb: "commented on",
-      target: t(tasks, 3),
-      time: "3h ago",
-    },
-    {
-      actor: pickMember(3),
-      verb: "started work on",
-      target: t(inprog, 0, 2),
-      time: "5h ago",
-    },
-    {
-      actor: project.lead,
-      verb: "marked milestone",
-      target: (doneMs[doneMs.length - 1] ?? project.milestones[0]).title,
-      suffix: "as complete",
-      time: "Yesterday",
-    },
-    {
-      actor: pickMember(4),
-      verb: "was assigned",
-      target: t(tasks, 5),
-      time: "Yesterday",
-    },
-    {
-      actor: pickMember(2),
-      verb: "added labels to",
-      target: t(tasks, 6),
-      time: "2 days ago",
-    },
-    {
-      actor: pickMember(1),
-      verb: "updated the timeline for",
-      target: project.name,
-      time: "3 days ago",
-    },
-    {
-      actor: project.lead,
-      verb: "created the project",
-      target: project.name,
-      time: longDate(project.start),
-    },
-  ];
+function buildActivity(_project: Project, _tasks: Task[]): ActivityEvent[] {
+  // Project activity is not persisted yet. Do not fabricate an audit trail.
+  return [];
 }
 
 function ActivityFeed({ events }: { events: ActivityEvent[] }) {
+  if (events.length === 0) {
+    return <p className="py-4 text-sm text-muted-foreground">No activity has been recorded yet.</p>;
+  }
   return (
     <ol className="relative space-y-5 border-l pl-6">
       {events.map((e, i) => (
@@ -1729,7 +1668,7 @@ function OverviewView({
     project.lead.id,
     ...project.members.map((m) => m.id),
   ]).size;
-  const spentPct = Math.round((project.spent / project.budget) * 100);
+  const spentPct = project.budget ? Math.round((project.spent / project.budget) * 100) : 0;
   const durationDays = Math.round(
     (isoToMs(project.due) - isoToMs(project.start)) / DAY
   );
@@ -1790,6 +1729,7 @@ function OverviewView({
               <ProgressBar value={project.progress} />
             </div>
 
+            {project.budget > 0 ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-2 font-medium">
@@ -1806,6 +1746,9 @@ function OverviewView({
                 tone={spentPct > 90 ? "foreground" : "muted"}
               />
             </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Budget tracking is not configured for this project.</p>
+            )}
 
             <div className="grid grid-cols-3 gap-3">
               <DateStat
@@ -1837,6 +1780,9 @@ function OverviewView({
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {project.milestones.length === 0 ? (
+              <p className="py-4 text-sm text-muted-foreground">No milestones have been added yet.</p>
+            ) : (
             <ul className="space-y-4">
               {project.milestones.map((m) => (
                 <li key={m.title} className="flex items-start gap-3">
@@ -1860,6 +1806,7 @@ function OverviewView({
                 </li>
               ))}
             </ul>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -1946,8 +1893,10 @@ const TABS = [
 
 export function ProjectWorkspace({
   project,
+  initialTab = "overview",
   tasks,
   members,
+  membersLoaded,
   actions,
   canSubmitProgress,
   canReviewProgress,
@@ -1962,8 +1911,10 @@ export function ProjectWorkspace({
     onUpdateMemberRole,
 }: {
   project: Project;
+  initialTab?: "overview" | "members";
   tasks: Task[];
-  members: TeamMember[];
+    members: TeamMember[];
+    membersLoaded: boolean;
   actions: TaskActions;
   canSubmitProgress: boolean;
   canReviewProgress: boolean;
@@ -1983,7 +1934,7 @@ export function ProjectWorkspace({
   const events = useMemo(() => buildActivity(project, tasks), [project, tasks]);
 
   return (
-    <Tabs defaultValue="overview" className="w-full gap-4">
+    <Tabs defaultValue={initialTab} className="w-full gap-4">
       <div className="overflow-x-auto">
         <TabsList className="h-9">
           {TABS.map((t) => (
@@ -2035,9 +1986,9 @@ export function ProjectWorkspace({
       </TabsContent>
       <TabsContent value="members">
           <MembersView
-            project={project}
             tasks={tasks}
             members={members}
+            membersLoaded={membersLoaded}
             canManageMembers={canManageMembers}
             candidates={memberCandidates}
             onAddMember={onAddMember}

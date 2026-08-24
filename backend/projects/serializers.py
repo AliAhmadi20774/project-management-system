@@ -12,17 +12,18 @@ class ProjectSerializer(serializers.ModelSerializer):
     progress = serializers.SerializerMethodField()
     member_count = serializers.SerializerMethodField()
     can_manage_members = serializers.SerializerMethodField()
+    is_starred = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
         fields = (
             'id', 'name', 'code', 'category', 'description', 'status', 'start_date', 'end_date', 'created_by',
-            'created_by_name', 'task_count', 'completed_task_count', 'progress', 'member_count', 'can_manage_members',
+            'created_by_name', 'task_count', 'completed_task_count', 'progress', 'member_count', 'can_manage_members', 'is_starred',
             'created_at', 'updated_at',
         )
         read_only_fields = (
             'id', 'created_by', 'created_by_name', 'task_count', 'completed_task_count',
-            'progress', 'member_count', 'can_manage_members', 'created_at', 'updated_at',
+            'progress', 'member_count', 'can_manage_members', 'is_starred', 'created_at', 'updated_at',
         )
 
     @staticmethod
@@ -53,6 +54,14 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_can_manage_members(self, project):
         request = self.context.get('request')
         return bool(request and can_manage_project_members(request.user, project))
+
+    def get_is_starred(self, project):
+        request = self.context.get('request')
+        return bool(
+            request
+            and request.user.is_authenticated
+            and project.favorites.filter(user=request.user).exists()
+        )
 
     def validate_code(self, value):
         code = value.strip().upper()

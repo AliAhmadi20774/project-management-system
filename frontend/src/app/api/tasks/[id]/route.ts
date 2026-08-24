@@ -25,11 +25,18 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     ? "submit-progress"
     : action === "review-progress"
       ? "review-progress"
+      : action === "duplicate"
+        ? "duplicate"
       : null;
   if (!actionPath) {
     return Response.json({ detail: "Unsupported task action." }, { status: 400 });
   }
   const body = await request.text();
+  if (actionPath === "duplicate") {
+    return proxyAuthenticatedResponse(
+      await authenticatedApiFetch(request, `/api/v1/tasks/${id}/${actionPath}/`, { method: "POST" })
+    );
+  }
   if (!body) {
     return Response.json({ detail: "A JSON request body is required." }, { status: 400 });
   }

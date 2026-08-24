@@ -57,7 +57,6 @@ import {
 } from "@/components/ui/tooltip";
 import { DeleteDialog } from "@/components/delete-dialog";
 import {
-  projects,
   team,
   type Project,
   type ProjectStatus,
@@ -119,6 +118,7 @@ function toProjectMember(membership: ApiMembership): TeamMember {
 
 const FILTERS: Array<{ value: string; label: string }> = [
   { value: "all", label: "All" },
+  { value: "starred", label: "Starred" },
   { value: "On Track", label: "On Track" },
   { value: "At Risk", label: "At Risk" },
   { value: "Delayed", label: "Delayed" },
@@ -126,6 +126,7 @@ const FILTERS: Array<{ value: string; label: string }> = [
 ];
 
 function formatDate(iso: string) {
+  if (!iso) return "No due date";
   const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${months[month - 1]} ${day}, ${year}`;
@@ -149,16 +150,23 @@ function AvatarStack({
   max?: number;
 }) {
   const router = useRouter();
+  const [showAllMembers, setShowAllMembers] = useState(false);
   // Lead first, then the rest, de-duplicated.
   const people = [lead, ...members.filter((m) => m.id !== lead.id)];
   const shown = people.slice(0, max);
   const extra = people.length - shown.length;
   return (
-    <div className="flex items-center -space-x-2">
+    <Dialog open={showAllMembers} onOpenChange={setShowAllMembers}>
+      <div className="flex items-center -space-x-2">
       {shown.map((m, i) => (
         <Tooltip key={m.id}>
           <TooltipTrigger asChild>
-            <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); router.push(`/profile?user=${m.id}`); }} aria-label={`Open ${m.name}'s profile`}>
+            <button
+              type="button"
+              className="relative z-10 rounded-full transition-transform duration-150 hover:-translate-y-1 focus-visible:-translate-y-1 focus-visible:outline-none"
+              onClick={(event) => { event.preventDefault(); event.stopPropagation(); router.push(`/profile?user=${m.id}`); }}
+              aria-label={`Open ${m.name}'s profile`}
+            >
               <Avatar className="size-7 ring-2 ring-card">
                 <AvatarImage src={m.avatar} alt={m.name} />
                 <AvatarFallback className="text-[10px]">{initials(m.name)}</AvatarFallback>
@@ -172,11 +180,50 @@ function AvatarStack({
         </Tooltip>
       ))}
       {extra > 0 && (
-        <span className="flex size-7 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-card">
+        <button
+          type="button"
+          className="flex size-7 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground ring-2 ring-card transition-all duration-150 hover:-translate-y-1 hover:bg-accent focus-visible:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Show ${extra} more project members`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setShowAllMembers(true);
+          }}
+        >
           +{extra}
-        </span>
+        </button>
       )}
-    </div>
+      </div>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Project members</DialogTitle>
+          <DialogDescription>Choose a member to open their profile.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-2 py-2 sm:grid-cols-3">
+          {people.map((member) => (
+            <button
+              key={member.id}
+              type="button"
+              className="flex min-w-0 items-center gap-2 rounded-lg border p-2 text-left transition-colors hover:bg-muted"
+              onClick={() => {
+                setShowAllMembers(false);
+                router.push(`/profile?user=${member.id}`);
+              }}
+            >
+              <Avatar className="size-8 shrink-0">
+                <AvatarImage src={member.avatar} alt={member.name} />
+                <AvatarFallback className="text-[10px]">{initials(member.name)}</AvatarFallback>
+              </Avatar>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{member.name}</span>
+                <span className="block truncate text-xs text-muted-foreground">{member.role}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -256,8 +303,13 @@ function ProjectCard({
   onDelete: (project: Project) => void;
 }) {
   return (
-    <Link href={`/projects/${project.id}`} className="group block">
-      <Card className="relative gap-0 overflow-hidden py-0 transition-shadow hover:shadow-md">
+    <Card className="group relative gap-0 overflow-hidden py-0 transition-shadow hover:shadow-md">
+      <Link
+        href={`/projects/${project.id}`}
+        aria-label={`Open ${project.name}`}
+        className="absolute inset-0 z-0"
+      />
+      <div className="relative z-10 pointer-events-none">
         <span className="absolute inset-x-0 top-0 h-1 bg-muted-foreground/20" />
         <CardContent className="space-y-4 p-5 pt-6">
           <div className="flex items-start justify-between gap-3">
@@ -277,7 +329,7 @@ function ProjectCard({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="pointer-events-auto flex items-center gap-1">
               <StatusBadge status={project.status} />
               <ProjectMenu
                 project={project}
@@ -316,13 +368,15 @@ function ProjectCard({
           </div>
         </CardContent>
         <div className="flex items-center justify-between border-t px-5 py-3">
+          <div className="pointer-events-auto">
           <AvatarStack members={project.members} lead={project.lead} />
+          </div>
           <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
             Open <IconArrowUpRight className="size-3.5" />
           </span>
         </div>
-      </Card>
-    </Link>
+      </div>
+    </Card>
   );
 }
 
@@ -336,11 +390,13 @@ function ProjectRow({
   onDelete: (project: Project) => void;
 }) {
   return (
-    <Link
-      href={`/projects/${project.id}`}
-      className="group flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center"
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+    <div className="group relative flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center">
+      <Link
+        href={`/projects/${project.id}`}
+        aria-label={`Open ${project.name}`}
+        className="absolute inset-0 z-0"
+      />
+      <div className="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center gap-3">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-xs font-semibold text-background">
           {project.key.slice(0, 2)}
         </span>
@@ -353,23 +409,23 @@ function ProjectRow({
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2 sm:w-28">
+      <div className="pointer-events-none relative z-10 flex items-center gap-2 sm:w-28">
         <span className={`size-2 rounded-full ${STATUS_DOT[project.status]}`} />
         <span className="text-sm text-muted-foreground">{project.status}</span>
       </div>
-      <div className="flex items-center gap-2 sm:w-44">
+      <div className="pointer-events-none relative z-10 flex items-center gap-2 sm:w-44">
         <NeutralProgress value={project.progress} />
         <span className="w-9 text-right text-xs font-medium tabular-nums">
           {project.progress}%
         </span>
       </div>
-      <div className="hidden text-sm text-muted-foreground tabular-nums sm:block sm:w-20">
+      <div className="pointer-events-none relative z-10 hidden text-sm text-muted-foreground tabular-nums sm:block sm:w-20">
         {project.taskCounts.done}/{project.taskCounts.total}
       </div>
-      <div className="hidden text-sm text-muted-foreground tabular-nums sm:block sm:w-28">
+      <div className="pointer-events-none relative z-10 hidden text-sm text-muted-foreground tabular-nums sm:block sm:w-28">
         {formatDate(project.due)}
       </div>
-      <div className="flex items-center justify-end gap-1 sm:w-28">
+      <div className="relative z-10 flex items-center justify-end gap-1 sm:w-28">
         <AvatarStack members={project.members} lead={project.lead} max={3} />
         <ProjectMenu
           project={project}
@@ -377,7 +433,7 @@ function ProjectRow({
           onDelete={onDelete}
         />
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -566,7 +622,8 @@ function AddProjectDialog({
 export default function ProjectsPage() {
   const [filter, setFilter] = useState("all");
   const [view, setView] = useState<"grid" | "list">("grid");
-  const [items, setItems] = useState<Project[]>(projects);
+  const [items, setItems] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
   const idRef = useRef(900);
@@ -579,7 +636,7 @@ export default function ProjectsPage() {
         const response = await fetch("/api/projects", { cache: "no-store" });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Could not load projects.");
-        const apiProjects: Array<{ id: number; name: string; code: string; category: string; progress: number; status: string; task_count: number; completed_task_count: number }> =
+        const apiProjects: Array<{ id: number; name: string; code: string; category: string; description: string; start_date: string | null; end_date: string | null; progress: number; status: string; task_count: number; completed_task_count: number; is_starred: boolean }> =
           Array.isArray(data) ? data : data.results || [];
         const membershipEntries = await Promise.all(apiProjects.map(async (apiProject: { id: number }) => {
           const membersResponse = await fetch(`/api/project-memberships?project=${apiProject.id}`, { cache: "no-store" });
@@ -591,31 +648,49 @@ export default function ProjectsPage() {
         const membershipsByProject = new Map<number, ApiMembership[]>(membershipEntries);
         if (cancelled) return;
 
-        setItems((current) => current.map((project) => {
-          const apiProject = apiProjects.find((item: { name: string }) => item.name === project.name);
-          if (!apiProject) return project;
+        setItems(apiProjects.map((apiProject) => {
           const members = (membershipsByProject.get(apiProject.id) ?? []).map(toProjectMember);
           const lead = members.find((member) => member.role === "lead")
-            ?? members.find((member) => member.role === "manager")
-            ?? project.lead;
+            ?? members[0]
+            ?? {
+              id: "unassigned",
+              name: "Unassigned",
+              email: "",
+              role: "",
+              department: "",
+              avatar: "/avatars/default-young-man.png",
+              status: "Offline" as const,
+              location: "",
+            };
           return {
-            ...project,
-            key: apiProject.code || project.key,
-            category: apiProject.category || project.category,
+            id: `PRJ-${apiProject.id + 100}`,
+            name: apiProject.name,
+            key: apiProject.code,
+            description: apiProject.description,
             progress: apiProject.progress,
-            status: API_PROJECT_STATUS[apiProject.status] ?? project.status,
+            status: API_PROJECT_STATUS[apiProject.status] ?? "On Track",
+            color: "",
+            category: apiProject.category || "General",
             taskCounts: {
               total: apiProject.task_count,
               done: apiProject.completed_task_count,
             },
+            starred: apiProject.is_starred,
             lead,
-            members: members.length ? members : project.members,
+            members,
+            start: apiProject.start_date ?? "",
+            due: apiProject.end_date ?? "",
+            budget: 0,
+            spent: 0,
+            milestones: [],
           };
         }));
       } catch (error) {
         if (!cancelled) {
           toast.error(error instanceof Error ? error.message : "Could not load projects.");
         }
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
     }
 
@@ -679,14 +754,15 @@ export default function ProjectsPage() {
 
   const counts = useMemo(() => {
     const map: Record<string, number> = { all: items.length };
+    map.starred = items.filter((project) => project.starred).length;
     for (const p of items) map[p.status] = (map[p.status] ?? 0) + 1;
     return map;
   }, [items]);
 
   const stats = useMemo<StatCardType[]>(() => {
     const active = items.filter((p) => p.status !== "Completed").length;
-    const tasksThisWeek = items.reduce(
-      (sum, p) => sum + Math.round(p.taskCounts.done / 6),
+    const completedTasks = items.reduce(
+      (sum, project) => sum + project.taskCounts.done,
       0
     );
     const memberIds = new Set<string>();
@@ -703,37 +779,29 @@ export default function ProjectsPage() {
       {
         label: "Active projects",
         value: String(active),
-        change: 12.5,
-        trend: "up",
-        hint: "2 launching this quarter",
       },
       {
         label: "Tasks completed",
-        value: String(tasksThisWeek),
-        change: 8.4,
-        trend: "up",
-        hint: "this week",
+        value: String(completedTasks),
       },
       {
         label: "Team members",
         value: String(memberIds.size),
-        change: 4.2,
-        trend: "up",
-        hint: "across all projects",
       },
       {
         label: "On track",
         value: `${onTrack}%`,
-        change: 3.1,
-        trend: "up",
-        hint: "of all projects",
       },
     ];
   }, [items]);
 
   const filtered = useMemo(
     () =>
-      filter === "all" ? items : items.filter((p) => p.status === filter),
+      filter === "all"
+        ? items
+        : filter === "starred"
+          ? items.filter((project) => project.starred)
+          : items.filter((project) => project.status === filter),
     [filter, items]
   );
 
@@ -803,7 +871,13 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <Card>
+          <CardContent className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+            Loading projects…
+          </CardContent>
+        </Card>
+      ) : filtered.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
             <IconFolders className="size-8 opacity-50" />
