@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   IconMapPin,
   IconMail,
@@ -64,8 +65,15 @@ const socials = [
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [profileOverride, setProfileOverride] = useState<AuthUser | null>(null);
-  const profile = profileOverride ?? user;
+  const requestedUserId = searchParams.get("user");
+  const [viewedProfile, setViewedProfile] = useState<AuthUser | null>(null);
+  useEffect(() => {
+    if (!requestedUserId || requestedUserId === String(user?.id)) { setViewedProfile(null); return; }
+    fetch(`/api/users/${requestedUserId}`).then((response) => response.ok ? response.json() : null).then(setViewedProfile).catch(() => setViewedProfile(null));
+  }, [requestedUserId, user?.id]);
+  const profile = viewedProfile ?? profileOverride ?? user;
   const profileName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.username || "User";
   const initials = profileName.split(" ").map((part) => part[0]).join("").slice(0, 2);
   const accessLabel = profile?.access_role === "system_admin" ? "System admin" : profile?.access_role === "manager" ? "Manager" : "User";
@@ -128,7 +136,7 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
-            {profile && <ProfileActions user={profile} onUpdated={setProfileOverride} />}
+              {profile && !viewedProfile && <ProfileActions user={profile} onUpdated={setProfileOverride} />}
           </div>
 
           <Separator className="my-6" />

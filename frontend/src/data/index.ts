@@ -2,6 +2,11 @@
 // Fake data for the OrbynAdmin admin template. All figures are illustrative.
 // ---------------------------------------------------------------------------
 
+// Date-only fixture values must not pass through the local timezone.  This
+// keeps server-rendered and browser-rendered text identical.
+const calendarDate = (year: number, monthIndex: number, day: number) =>
+  `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
 export const revenueByMonth = [
   { month: "Jan", revenue: 18600, orders: 240, profit: 6200 },
   { month: "Feb", revenue: 22050, orders: 298, profit: 7400 },
@@ -104,7 +109,7 @@ export const customers: Customer[] = Array.from({ length: 48 }, (_, i) => {
     plan: pick(plans, i + (i % 3)),
     spent: 480 + ((i * 137) % 9200),
     location: pick(locations, i * 2),
-    joined: new Date(2024, i % 12, ((i * 7) % 27) + 1).toISOString().slice(0, 10),
+    joined: calendarDate(2024, i % 12, ((i * 7) % 27) + 1),
   };
 });
 
@@ -131,7 +136,7 @@ export const orders: Order[] = Array.from({ length: 40 }, (_, i) => {
     customer: `${first} ${last}`,
     avatar: `https://api.dicebear.com/9.x/avataaars/svg?seed=${((i + 12) % 70) + 1}`,
     product: pick(products, i),
-    date: new Date(2026, 6, ((i * 3) % 27) + 1).toISOString().slice(0, 10),
+    date: calendarDate(2026, 6, ((i * 3) % 27) + 1),
     amount: 29 + ((i * 53) % 940),
     status: pick(orderStatuses, i + (i % 5)),
     method: pick(methods, i),
@@ -270,8 +275,8 @@ export const invoices: Invoice[] = Array.from({ length: 14 }, (_, i) => {
     clientEmail: cust.email,
     company: cust.company,
     avatar: cust.avatar,
-    issued: new Date(2026, 5 + (i % 2), ((i * 5) % 27) + 1).toISOString().slice(0, 10),
-    due: new Date(2026, 6 + (i % 2), ((i * 5) % 27) + 1).toISOString().slice(0, 10),
+    issued: calendarDate(2026, 5 + (i % 2), ((i * 5) % 27) + 1),
+    due: calendarDate(2026, 6 + (i % 2), ((i * 5) % 27) + 1),
     status: invoiceStatuses[i % invoiceStatuses.length],
     items,
     subtotal,
@@ -413,8 +418,8 @@ export const projects: Project[] = projectSeeds.map((p, i) => {
     category: p.category,
     lead: getTeamMember(i),
     members,
-    start: new Date(2026, 3 + (i % 3), ((i * 4) % 20) + 1).toISOString().slice(0, 10),
-    due: new Date(2026, 8 + (i % 3), ((i * 6) % 25) + 1).toISOString().slice(0, 10),
+    start: calendarDate(2026, 3 + (i % 3), ((i * 4) % 20) + 1),
+    due: calendarDate(2026, 8 + (i % 3), ((i * 6) % 25) + 1),
     budget: 40000 + i * 15000,
     spent: Math.round((40000 + i * 15000) * (p.progress / 100) * 0.9),
     taskCounts: { total, done },
@@ -455,8 +460,8 @@ export const projectTasks: Task[] = taskTitles.map((title, i) => {
     assignee: getTeamMember(i + 2),
     labels: [labelPool[i % labelPool.length], labelPool[(i * 5 + 2) % labelPool.length]].filter((v, idx, a) => a.indexOf(v) === idx),
     projectId: project.id,
-    start: new Date(2026, 6, ((i * 2) % 20) + 1).toISOString().slice(0, 10),
-    due: new Date(2026, 6, ((i * 3) % 24) + 4).toISOString().slice(0, 10),
+    start: calendarDate(2026, 6, ((i * 2) % 20) + 1),
+    due: calendarDate(2026, 6, ((i * 3) % 24) + 4),
     points: [1, 2, 3, 5, 8][i % 5],
     comments: (i * 3) % 9,
     subtasks: { total, done: statusIdx === 4 ? total : i % (total + 1) },

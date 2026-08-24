@@ -12,7 +12,6 @@ class UserViewSet(ModelViewSet):
     queryset = User.objects.select_related('department').all()
     serializer_class = UserWriteSerializer
     permission_classes = (IsAdminUser,)
-    lookup_field = 'username'
 
     def get_serializer_class(self):
         if self.action in ('list', 'retrieve'):
@@ -26,6 +25,8 @@ class UserViewSet(ModelViewSet):
             return (IsAuthenticated(),)
         if self.action in ('list', 'create'):
             return (CanManageUsers(),)
+        if self.action == 'retrieve':
+            return (IsAuthenticated(),)
         return (IsAdminUser(),)
 
     @action(detail=False, methods=('get', 'patch'), permission_classes=(IsAuthenticated,))
