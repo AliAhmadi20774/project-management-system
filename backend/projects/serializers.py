@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.utils import timezone
 
 from .models import Project, ProjectMembership, Task, TimeEntry
+from .permissions import can_manage_project_members
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -10,17 +11,18 @@ class ProjectSerializer(serializers.ModelSerializer):
     completed_task_count = serializers.SerializerMethodField()
     progress = serializers.SerializerMethodField()
     member_count = serializers.SerializerMethodField()
+    can_manage_members = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
         fields = (
             'id', 'name', 'description', 'status', 'start_date', 'end_date', 'created_by',
-            'created_by_name', 'task_count', 'completed_task_count', 'progress', 'member_count',
+            'created_by_name', 'task_count', 'completed_task_count', 'progress', 'member_count', 'can_manage_members',
             'created_at', 'updated_at',
         )
         read_only_fields = (
             'id', 'created_by', 'created_by_name', 'task_count', 'completed_task_count',
-            'progress', 'member_count', 'created_at', 'updated_at',
+            'progress', 'member_count', 'can_manage_members', 'created_at', 'updated_at',
         )
 
     @staticmethod
@@ -35,14 +37,22 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_progress(project):
         # A task only affects its project by its configured weight.  The value
         # used here is the observer-approved progress, never the submitted one.
-        return round(sum(
-            task.approved_progress * task.weight for task in project.tasks.all()
-        ) / 100)
+        tasks = list(project.tasks.all())
+        total_weight = sum(task.weight for task in tasks)
+        if not total_weight:
+            return 0
+        weighted_progress = sum(
+            task.approved_progress * task.weight for task in tasks
+        ) / total_weight
+        return round(weighted_progress, 1)
 
     @staticmethod
     def get_member_count(project):
         return project.memberships.values('user_id').distinct().count()
 
+    def get_can_manage_members(self, project):
+        request = self.context.get('request')
+        return bool(request and can_manage_project_members(request.user, project))
 
 class ProjectMembershipSerializer(serializers.ModelSerializer):
     user_name = serializers.SerializerMethodField()

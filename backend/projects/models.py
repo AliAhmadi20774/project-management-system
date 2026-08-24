@@ -30,7 +30,6 @@ class Project(models.Model):
 
 class ProjectMembership(models.Model):
     class Role(models.TextChoices):
-        MANAGER = 'manager', 'Project manager'
         LEAD = 'lead', 'Project lead'
         OBSERVER = 'observer', 'Project observer'
         MEMBER = 'member', 'Team member'
@@ -50,8 +49,10 @@ class ProjectMembership(models.Model):
 
 class Task(models.Model):
     class Status(models.TextChoices):
+        BACKLOG = 'backlog', 'Backlog'
         TODO = 'todo', 'To do'
         IN_PROGRESS = 'in_progress', 'In progress'
+        IN_REVIEW = 'in_review', 'In review'
         DONE = 'done', 'Done'
 
     class ProgressState(models.TextChoices):

@@ -62,9 +62,8 @@ class Command(BaseCommand):
         users[0].groups.add(manager_group)
 
         for index, project in enumerate(Project.objects.order_by('id')):
-            manager_index, lead_index, observer_index, member_indexes = TEAM_PATTERNS[index % len(TEAM_PATTERNS)]
+            _manager_index, lead_index, observer_index, member_indexes = TEAM_PATTERNS[index % len(TEAM_PATTERNS)]
             ProjectMembership.objects.filter(project=project, user__in=users).delete()
-            ProjectMembership.objects.create(project=project, user=users[manager_index], role=ProjectMembership.Role.MANAGER)
             ProjectMembership.objects.create(project=project, user=users[lead_index], role=ProjectMembership.Role.LEAD)
             ProjectMembership.objects.create(project=project, user=users[observer_index], role=ProjectMembership.Role.OBSERVER)
             for member_index in member_indexes:

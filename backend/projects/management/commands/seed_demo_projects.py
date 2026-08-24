@@ -105,11 +105,6 @@ class Command(BaseCommand):
                 name=data['name'],
                 defaults={key: value for key, value in data.items() if key != 'tasks'} | {'created_by': owner},
             )
-            ProjectMembership.objects.get_or_create(
-                project=project,
-                user=owner,
-                role=ProjectMembership.Role.MANAGER,
-            )
             if created:
                 created_count += 1
                 for title, status, progress, weight in tasks:
@@ -117,7 +112,7 @@ class Command(BaseCommand):
                         project=project,
                         title=title,
                         status=status,
-                        assignee=owner,
+                        assignee=None,
                         approved_progress=progress,
                         progress_state=Task.ProgressState.APPROVED,
                         weight=weight,

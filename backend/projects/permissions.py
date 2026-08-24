@@ -8,7 +8,10 @@ def is_system_admin(user):
 
 
 def can_create_projects(user):
-    return is_system_admin(user) or user.groups.filter(name=PROJECT_MANAGER_GROUP).exists()
+    return bool(
+        is_system_admin(user)
+        or (user and user.is_authenticated and user.groups.filter(name=PROJECT_MANAGER_GROUP).exists())
+    )
 
 
 def has_project_role(user, project, *roles):
@@ -18,14 +21,20 @@ def has_project_role(user, project, *roles):
 
 
 def can_manage_project(user, project):
-    return has_project_role(user, project, ProjectMembership.Role.MANAGER)
+    # "Project Manager" is a global permission, not a project membership role.
+    # Leads, observers and members therefore cannot administer a project.
+    return can_create_projects(user)
+
+
+def can_manage_project_members(user, project):
+    """Only global Project Managers and System Admins manage a project's roster."""
+    return can_create_projects(user)
 
 
 def can_manage_tasks(user, project):
     return has_project_role(
         user,
         project,
-        ProjectMembership.Role.MANAGER,
         ProjectMembership.Role.LEAD,
     )
 
