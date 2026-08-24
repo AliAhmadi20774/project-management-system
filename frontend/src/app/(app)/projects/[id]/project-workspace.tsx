@@ -1,6 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCorners,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import {
   IconLayoutDashboard,
@@ -376,7 +389,7 @@ function TaskMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuItem onSelect={() => actions.onOpen(task)}>
-          <IconExternalLink className="size-4" /> Open
+          <IconExternalLink className="size-4" /> Edit task
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => actions.onDuplicate(task)}>
           <IconCopy className="size-4" /> Duplicate
@@ -393,10 +406,29 @@ function TaskMenu({
   );
 }
 
-function BoardCard({ task, actions }: { task: Task; actions: TaskActions }) {
+function BoardCard({
+  task,
+  actions,
+  canManageTasks,
+}: {
+  task: Task;
+  actions: TaskActions;
+  canManageTasks: boolean;
+}) {
   const prio = PRIORITY_META[task.priority];
+  const isPendingReview = task.progressState === "pending_review";
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: task.id,
+    disabled: !canManageTasks,
+  });
   return (
-    <div className="group/card space-y-2.5 rounded-lg border bg-card p-3 shadow-sm transition-colors hover:border-foreground/20">
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      style={{ transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.35 : 1 }}
+      className={`group/card space-y-2.5 rounded-lg border bg-card p-3 shadow-sm transition-[transform,opacity,border-color] hover:border-foreground/20 ${canManageTasks ? "cursor-grab touch-none active:cursor-grabbing" : ""}`}
+    >
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5">
           <IconFlag3Filled className={`size-3.5 ${prio.flag}`} />
@@ -405,9 +437,14 @@ function BoardCard({ task, actions }: { task: Task; actions: TaskActions }) {
           </span>
         </span>
         <div className="flex items-center gap-1">
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
-            {task.weight ?? 0}% weight
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {task.priority}
+            </span>
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+              {task.weight ?? 0}% weight
+            </span>
+          </div>
           <TaskMenu task={task} actions={actions} />
         </div>
       </div>
@@ -418,10 +455,15 @@ function BoardCard({ task, actions }: { task: Task; actions: TaskActions }) {
 
       <div className="space-y-1">
         <div className="flex justify-between text-[11px] text-muted-foreground">
-          <span>Progress</span>
+          <span>{isPendingReview ? "Approved progress" : "Progress"}</span>
           <span className="tabular-nums">{task.approvedProgress ?? 0}%</span>
         </div>
         <Progress value={task.approvedProgress ?? 0} className="h-1.5" />
+        {isPendingReview && (
+          <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+            {task.reportedProgress ?? 0}% reported · awaiting observer approval
+          </p>
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-0.5">
@@ -450,98 +492,78 @@ function BoardCard({ task, actions }: { task: Task; actions: TaskActions }) {
   );
 }
 
-function BoardView({
+function BoardColumn({
+  column,
   tasks,
   actions,
+  canManageTasks,
   onAddTask,
 }: {
+  column: (typeof BOARD_COLUMNS)[number];
+  tasks: Task[];
+  actions: TaskActions;
+  canManageTasks: boolean;
+  onAddTask: (status: TaskStatus) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: column.status, disabled: !canManageTasks });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex min-w-0 flex-col gap-3 rounded-xl bg-muted/40 p-3 transition-all ${isOver ? "scale-[1.01] bg-primary/10 ring-2 ring-primary/50" : ""}`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2"><span className={`size-2 rounded-full ${column.dot}`} /><span className="text-sm font-medium">{column.status}</span><span className="rounded bg-background px-1.5 text-xs font-medium tabular-nums text-muted-foreground">{tasks.length}</span></div>
+        <div className="flex items-center gap-0.5">
+          {canManageTasks && <Button variant="ghost" size="icon" className="size-6" onClick={() => onAddTask(column.status)} aria-label={`Add task to ${column.status}`}><IconPlus className="size-4" /></Button>}
+          <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-6" aria-label={`${column.status} column options`}><IconDots className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-44">
+            {canManageTasks && <DropdownMenuItem onSelect={() => onAddTask(column.status)}><IconPlus className="size-4" /> Add task</DropdownMenuItem>}
+            <DropdownMenuItem onSelect={() => toast.success("Column sorted", { description: `${column.status} sorted by priority.` })}><IconArrowsSort className="size-4" /> Sort by priority</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => toast(`${column.status} collapsed`, { description: `${tasks.length} tasks hidden.` })}><IconEyeOff className="size-4" /> Collapse column</DropdownMenuItem>
+          </DropdownMenuContent></DropdownMenu>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        {tasks.map((task) => <BoardCard key={task.id} task={task} actions={actions} canManageTasks={canManageTasks} />)}
+        {isOver && <div className="rounded-lg border border-dashed border-primary/60 bg-primary/5 px-3 py-4 text-center text-xs font-medium text-primary">Drop to move to {column.status}</div>}
+      </div>
+      {canManageTasks && <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => onAddTask(column.status)}><IconPlus className="size-4" /> Add task</Button>}
+    </div>
+  );
+}
+
+function BoardView({ tasks, actions, onAddTask, canManageTasks, onStatusChange }: {
   tasks: Task[];
   actions: TaskActions;
   onAddTask: (status: TaskStatus) => void;
+  canManageTasks: boolean;
+  onStatusChange: (task: Task, status: TaskStatus) => Promise<void>;
 }) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveTask(tasks.find((task) => task.id === String(event.active.id)) ?? null);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const task = activeTask;
+    setActiveTask(null);
+    if (!task || !event.over) return;
+    const destination = String(event.over.id) as TaskStatus;
+    if (destination === task.status || !BOARD_COLUMNS.some((column) => column.status === destination)) return;
+    void onStatusChange(task, destination).catch((error) => toast.error(error instanceof Error ? error.message : "Could not update task status."));
+  }
+
   return (
-    <div className="flex gap-4 overflow-x-auto pb-2">
-      {BOARD_COLUMNS.map((col) => {
-        const colTasks = tasks.filter((t) => t.status === col.status);
-        return (
-          <div
-            key={col.status}
-            className="flex w-72 shrink-0 flex-col gap-3 rounded-xl bg-muted/40 p-3"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={`size-2 rounded-full ${col.dot}`} />
-                <span className="text-sm font-medium">{col.status}</span>
-                <span className="rounded bg-background px-1.5 text-xs font-medium tabular-nums text-muted-foreground">
-                  {colTasks.length}
-                </span>
-              </div>
-              <div className="flex items-center gap-0.5">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  onClick={() => onAddTask(col.status)}
-                  aria-label={`Add task to ${col.status}`}
-                >
-                  <IconPlus className="size-4" />
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-6"
-                      aria-label={`${col.status} column options`}
-                    >
-                      <IconDots className="size-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem onSelect={() => onAddTask(col.status)}>
-                      <IconPlus className="size-4" /> Add task
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        toast.success("Column sorted", {
-                          description: `${col.status} sorted by priority.`,
-                        })
-                      }
-                    >
-                      <IconArrowsSort className="size-4" /> Sort by priority
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        toast(`${col.status} collapsed`, {
-                          description: `${colTasks.length} tasks hidden.`,
-                        })
-                      }
-                    >
-                      <IconEyeOff className="size-4" /> Collapse column
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              {colTasks.map((t) => (
-                <BoardCard key={t.id} task={t} actions={actions} />
-              ))}
-            </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start text-muted-foreground"
-              onClick={() => onAddTask(col.status)}
-            >
-              <IconPlus className="size-4" /> Add task
-            </Button>
-          </div>
-        );
-      })}
-    </div>
+    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragCancel={() => setActiveTask(null)} onDragEnd={handleDragEnd}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+        {BOARD_COLUMNS.map((column) => <BoardColumn key={column.status} column={column} tasks={tasks.filter((task) => task.status === column.status)} actions={actions} canManageTasks={canManageTasks} onAddTask={onAddTask} />)}
+      </div>
+      <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" }}>
+        {activeTask && <div className="w-72 rounded-lg border bg-card p-3 shadow-2xl"><p className="font-mono text-[11px] text-muted-foreground">{activeTask.id}</p><p className="mt-1 text-sm font-medium">{activeTask.title}</p></div>}
+      </DragOverlay>
+    </DndContext>
   );
 }
 
@@ -652,11 +674,18 @@ function ListView({
                   {shortDate(t.due)}
                 </TableCell>
                 <TableCell>
-                  <div className="flex w-32 items-center gap-2">
-                    <Progress value={t.approvedProgress ?? 0} className="h-1.5" />
-                    <span className="w-9 text-right text-xs font-medium tabular-nums">
-                      {t.approvedProgress ?? 0}%
-                    </span>
+                  <div className="space-y-1">
+                    <div className="flex w-32 items-center gap-2">
+                      <Progress value={t.approvedProgress ?? 0} className="h-1.5" />
+                      <span className="w-9 text-right text-xs font-medium tabular-nums">
+                        {t.approvedProgress ?? 0}%
+                      </span>
+                    </div>
+                    {t.progressState === "pending_review" && (
+                      <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                        {t.reportedProgress ?? 0}% pending approval
+                      </span>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">
@@ -702,7 +731,7 @@ function EditableGanttBar({
   onChange: (task: Task, progress: number) => Promise<void>;
   onTaskDetailsChange: (
     task: Task,
-    input: { title: string; status: TaskStatus; assigneeId: string; start: string; due: string; weight: number }
+    input: { title: string; status: TaskStatus; priority: TaskPriority; assigneeId: string; start: string; due: string; weight: number }
   ) => Promise<void>;
   onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
 }) {
@@ -714,6 +743,7 @@ function EditableGanttBar({
   const [saving, setSaving] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
   const [draftStatus, setDraftStatus] = useState<TaskStatus>(task.status);
+  const [draftPriority, setDraftPriority] = useState<TaskPriority>(task.priority);
   const [draftAssignee, setDraftAssignee] = useState(
     task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id
   );
@@ -724,6 +754,7 @@ function EditableGanttBar({
   const detailsDirty =
     draftTitle.trim() !== task.title ||
     draftStatus !== task.status ||
+    draftPriority !== task.priority ||
     draftAssignee !== (task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id) ||
     draftStart !== task.start ||
     draftDue !== task.due ||
@@ -734,6 +765,7 @@ function EditableGanttBar({
     setInputValue(String(progress));
     setDraftTitle(task.title);
     setDraftStatus(task.status);
+    setDraftPriority(task.priority);
     setDraftAssignee(task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id);
     setDraftStart(task.start);
     setDraftDue(task.due);
@@ -771,6 +803,7 @@ function EditableGanttBar({
         await onTaskDetailsChange(task, {
           title: draftTitle.trim(),
           status: draftStatus,
+          priority: draftPriority,
           assigneeId: draftAssignee,
           start: draftStart,
           due: draftDue,
@@ -910,14 +943,30 @@ function EditableGanttBar({
                 aria-label="Task title"
               />
               <div className="grid grid-cols-2 gap-2">
-                <Select value={draftStatus} onValueChange={(value) => setDraftStatus(value as TaskStatus)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {BOARD_COLUMNS.map((column) => (
-                      <SelectItem key={column.status} value={column.status}>{column.status}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Status</Label>
+                  <Select value={draftStatus} onValueChange={(value) => setDraftStatus(value as TaskStatus)}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {BOARD_COLUMNS.map((column) => (
+                        <SelectItem key={column.status} value={column.status}>{column.status}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Priority</Label>
+                  <Select value={draftPriority} onValueChange={(value) => setDraftPriority(value as TaskPriority)}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.keys(PRIORITY_META).map((priority) => (
+                        <SelectItem key={priority} value={priority}>{priority}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <Select value={draftAssignee} onValueChange={setDraftAssignee}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Assignee" /></SelectTrigger>
                   <SelectContent>
@@ -1047,7 +1096,7 @@ function GanttView({
   onProgressChange: (task: Task, progress: number) => Promise<void>;
   onTaskDetailsChange: (
     task: Task,
-    input: { title: string; status: TaskStatus; assigneeId: string; start: string; due: string; weight: number }
+    input: { title: string; status: TaskStatus; priority: TaskPriority; assigneeId: string; start: string; due: string; weight: number }
   ) => Promise<void>;
   onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
 }) {
@@ -1921,7 +1970,7 @@ export function ProjectWorkspace({
   onProgressChange: (task: Task, progress: number) => Promise<void>;
   onTaskDetailsChange: (
     task: Task,
-    input: { title: string; status: TaskStatus; assigneeId: string; start: string; due: string; weight: number }
+    input: { title: string; status: TaskStatus; priority: TaskPriority; assigneeId: string; start: string; due: string; weight: number }
   ) => Promise<void>;
     onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
     onAddTask: (status: TaskStatus) => void;
@@ -1950,7 +1999,24 @@ export function ProjectWorkspace({
         <OverviewView project={project} tasks={tasks} events={events} />
       </TabsContent>
       <TabsContent value="board">
-        <BoardView tasks={tasks} actions={actions} onAddTask={onAddTask} />
+        <BoardView
+          tasks={tasks}
+          actions={actions}
+          onAddTask={onAddTask}
+          canManageTasks={canSubmitProgress}
+          onStatusChange={async (task, status) => {
+            await onTaskDetailsChange(task, {
+              title: task.title,
+              status,
+              priority: task.priority,
+              assigneeId: task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id,
+              start: task.start,
+              due: task.due,
+              weight: task.weight ?? 1,
+            });
+            toast.success("Task status updated", { description: `${task.title} moved to ${status}.` });
+          }}
+        />
       </TabsContent>
       <TabsContent value="list">
         <ListView tasks={tasks} actions={actions} />
