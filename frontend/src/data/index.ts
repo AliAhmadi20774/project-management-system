@@ -51,9 +51,9 @@ export const salesByCategory = [
 export type StatCard = {
   label: string;
   value: string;
-  change: number;
-  trend: "up" | "down";
-  hint: string;
+  change?: number;
+  trend?: "up" | "down";
+  hint?: string;
 };
 
 export const overviewStats: StatCard[] = [
@@ -389,6 +389,7 @@ export type Project = {
   spent: number;
   taskCounts: { total: number; done: number };
   milestones: Milestone[];
+  starred?: boolean;
 };
 
 const projectSeeds = [

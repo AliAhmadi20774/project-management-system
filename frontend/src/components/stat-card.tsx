@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import type { StatCard as StatCardType } from "@/data";
 
 export function StatCard({ stat }: { stat: StatCardType }) {
-  const positive = stat.trend === "up";
+  const positive = stat.trend !== "down";
   return (
     <Card>
       <CardContent className="space-y-2.5">
@@ -13,23 +13,25 @@ export function StatCard({ stat }: { stat: StatCardType }) {
           <span className="text-3xl font-semibold tracking-tight tabular-nums">
             {stat.value}
           </span>
-          <span
-            className={cn(
-              "flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-              positive
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-            )}
-          >
-            {positive ? (
-              <IconTrendingUp className="size-3.5" />
-            ) : (
-              <IconTrendingDown className="size-3.5" />
-            )}
-            {stat.change}%
-          </span>
+          {stat.change !== undefined && (
+            <span
+              className={cn(
+                "flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+                positive
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+              )}
+            >
+              {positive ? (
+                <IconTrendingUp className="size-3.5" />
+              ) : (
+                <IconTrendingDown className="size-3.5" />
+              )}
+              {stat.change}%
+            </span>
+          )}
         </div>
-        <p className="text-xs text-muted-foreground">{stat.hint}</p>
+        {stat.hint && <p className="text-xs text-muted-foreground">{stat.hint}</p>}
       </CardContent>
     </Card>
   );
