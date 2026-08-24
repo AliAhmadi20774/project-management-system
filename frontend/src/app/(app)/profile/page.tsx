@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import {
   IconMapPin,
   IconMail,
@@ -14,6 +17,8 @@ import {
 } from "@tabler/icons-react";
 
 import { ProfileActions } from "./profile-actions";
+import { useAuth } from "@/components/auth-provider";
+import type { AuthUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,9 +36,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { currentUser, recentActivity, productList } from "@/data";
-
-export const metadata = { title: "Profile" };
+import { recentActivity, productList } from "@/data";
 
 const stats = [
   { label: "Projects", value: 48 },
@@ -59,14 +62,21 @@ const socials = [
   { label: "Dribbble", handle: "alexmorgan", icon: IconBrandDribbble, href: "#" },
 ];
 
-const about = [
-  { label: "Email", value: currentUser.email, icon: IconMail },
-  { label: "Phone", value: "+1 (415) 555-0138", icon: IconPhone },
-  { label: "Website", value: "alexmorgan.design", icon: IconWorld },
-  { label: "Joined", value: "March 2021", icon: IconCalendar },
-];
-
 export default function ProfilePage() {
+  const { user } = useAuth();
+  const [profileOverride, setProfileOverride] = useState<AuthUser | null>(null);
+  const profile = profileOverride ?? user;
+  const profileName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.username || "User";
+  const initials = profileName.split(" ").map((part) => part[0]).join("").slice(0, 2);
+  const accessLabel = profile?.access_role === "system_admin" ? "System admin" : profile?.access_role === "manager" ? "Manager" : "User";
+  const joined = profile?.date_joined ? new Date(profile.date_joined).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "—";
+  const about = [
+    { label: "Email", value: profile?.email || "Not set", icon: IconMail },
+    { label: "Phone", value: profile?.mobile || "Not set", icon: IconPhone },
+    { label: "Personnel number", value: profile?.username || "—", icon: IconRosetteDiscountCheckFilled },
+    { label: "Access", value: accessLabel, icon: IconWorld },
+    { label: "Joined", value: joined, icon: IconCalendar },
+  ];
   const projects = productList.slice(0, 4);
 
   return (
@@ -90,35 +100,35 @@ export default function ProfilePage() {
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
               <Avatar className="-mt-14 size-28 rounded-full sm:-mt-16 sm:size-32">
-                <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
+                <AvatarImage src={profile?.avatar_url ?? "/avatars/default-young-man.png"} alt={profileName} />
                 <AvatarFallback className="rounded-full text-2xl">
-                  {currentUser.name.slice(0, 2)}
+                  {initials}
                 </AvatarFallback>
               </Avatar>
               <div className="space-y-1.5 pb-1 text-center sm:pb-2 sm:text-left">
                 <div className="flex items-center justify-center gap-2 sm:justify-start">
                   <h1 className="text-2xl font-semibold tracking-tight">
-                    {currentUser.name}
+                    {profileName}
                   </h1>
                   <IconRosetteDiscountCheckFilled className="size-5 text-sky-500" />
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {currentUser.role} · Product & Growth
+                  {profile?.job_title || "No job title"} · {profile?.department_detail?.name || "No department"}
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted-foreground sm:justify-start">
                   <span className="flex items-center gap-1">
-                    <IconMapPin className="size-4" /> San Francisco, US
+                    <IconMapPin className="size-4" /> Personnel #{profile?.username || "—"}
                   </span>
                   <span className="flex items-center gap-1">
-                    <IconWorld className="size-4" /> alexmorgan.design
+                    <IconWorld className="size-4" /> {accessLabel}
                   </span>
                   <span className="flex items-center gap-1">
-                    <IconCalendar className="size-4" /> Joined Mar 2021
+                    <IconCalendar className="size-4" /> Joined {joined}
                   </span>
                 </div>
               </div>
             </div>
-            <ProfileActions />
+            {profile && <ProfileActions user={profile} onUpdated={setProfileOverride} />}
           </div>
 
           <Separator className="my-6" />
@@ -144,9 +154,7 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <p className="text-muted-foreground">
-                Product leader focused on building delightful, data-driven
-                experiences. I partner with design and engineering to ship
-                products that customers love.
+                Your personal account details and access level.
               </p>
               <Separator />
               <ul className="space-y-3">

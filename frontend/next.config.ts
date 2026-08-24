@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "api.dicebear.com" },
     ],
   },
+  async rewrites() {
+    return [{ source: "/media/:path*", destination: "http://api:8000/media/:path*" }];
+  },
 };
 
 export default nextConfig;

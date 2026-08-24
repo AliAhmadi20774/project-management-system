@@ -36,6 +36,7 @@ services:
     command: sh -c "test -d node_modules/next || npm ci; npm run dev -- --hostname 0.0.0.0"
     environment:
       API_INTERNAL_URL: http://api:8000
+      WATCHPACK_POLLING: "true"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules

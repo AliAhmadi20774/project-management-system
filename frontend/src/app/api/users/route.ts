@@ -1,33 +1,30 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
-import { ACCESS_COOKIE, apiBaseUrl } from "@/lib/auth";
+import { authenticatedApiFetch, proxyAuthenticatedResponse } from "@/lib/auth";
 
 async function requestUsers(request: NextRequest, init?: RequestInit) {
-  const access = request.cookies.get(ACCESS_COOKIE)?.value;
-  if (!access) return null;
-
-  return fetch(`${apiBaseUrl}/api/v1/accounts/users/`, {
+  const isMultipart = init?.body instanceof FormData;
+  return authenticatedApiFetch(request, "/api/v1/accounts/users/", {
     ...init,
     headers: {
-      Authorization: `Bearer ${access}`,
-      "Content-Type": "application/json",
+      ...(isMultipart ? {} : { "Content-Type": "application/json" }),
       ...init?.headers,
     },
-    cache: "no-store",
   });
 }
 
 export async function GET(request: NextRequest) {
-  const response = await requestUsers(request);
-  if (!response) return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
-  return NextResponse.json(await response.json(), { status: response.status });
+  return proxyAuthenticatedResponse(await requestUsers(request));
 }
 
 export async function POST(request: NextRequest) {
-  const response = await requestUsers(request, {
+  const contentType = request.headers.get("content-type") ?? "";
+  const body = contentType.includes("multipart/form-data")
+    ? await request.formData()
+    : JSON.stringify(await request.json());
+  return proxyAuthenticatedResponse(await requestUsers(request, {
     method: "POST",
-    body: JSON.stringify(await request.json()),
-  });
-  if (!response) return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
-  return NextResponse.json(await response.json(), { status: response.status });
+    headers: contentType.includes("multipart/form-data") ? undefined : { "Content-Type": "application/json" },
+    body,
+  }));
 }

@@ -19,7 +19,9 @@ class User(AbstractUser):
         validators=[personnel_number_validator],
         error_messages={'unique': 'A user with this personnel number already exists.'},
     )
-    email = models.EmailField('organizational email', unique=True)
+    email = models.EmailField('organizational email', unique=True, blank=True, null=True)
+    avatar = models.ImageField('profile image', upload_to='user_avatars/', blank=True, null=True)
+    avatar_seed = models.CharField('default avatar', max_length=20, default='young-man')
     mobile = models.CharField('mobile number', max_length=20, blank=True, null=True, unique=True)
     job_title = models.CharField('job title', max_length=150, blank=True)
     department = models.ForeignKey(
@@ -32,7 +34,7 @@ class User(AbstractUser):
     )
 
     USERNAME_FIELD = 'username'
-    REQUIRED_FIELDS = ('first_name', 'last_name', 'email')
+    REQUIRED_FIELDS = ('first_name', 'last_name')
 
     class Meta:
         verbose_name = 'user'

@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from .models import User
+from .permissions import CanManageUsers
 from .serializers import MyProfileSerializer, UserSerializer, UserWriteSerializer
 
 
@@ -17,6 +18,15 @@ class UserViewSet(ModelViewSet):
         if self.action in ('list', 'retrieve'):
             return UserSerializer
         return UserWriteSerializer
+
+    def get_permissions(self):
+        # Managers may onboard ordinary users; account mutation and elevated
+        # access assignment remain exclusive to System Admins.
+        if self.action == 'me':
+            return (IsAuthenticated(),)
+        if self.action in ('list', 'create'):
+            return (CanManageUsers(),)
+        return (IsAdminUser(),)
 
     @action(detail=False, methods=('get', 'patch'), permission_classes=(IsAuthenticated,))
     def me(self, request):

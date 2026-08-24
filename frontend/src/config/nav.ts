@@ -63,7 +63,7 @@ export const navGroups: NavGroup[] = [
     label: "Workspace",
     items: [
       { title: "Projects", url: "/projects", icon: IconFolders, badge: "6" },
-      { title: "Team", url: "/team", icon: IconUsersGroup },
+      { title: "Users", url: "/team", icon: IconUsersGroup },
       { title: "Roles & Permissions", url: "/roles", icon: IconShieldLock },
       { title: "Contacts", url: "/contacts", icon: IconAddressBook },
       { title: "Activity", url: "/activity", icon: IconActivity },

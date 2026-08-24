@@ -1,48 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-  ACCESS_COOKIE,
-  REFRESH_COOKIE,
-  apiBaseUrl,
-  clearAuthCookies,
-  getCurrentUser,
-  setAuthCookies,
+  applyAuthResult,
+  authenticatedApiFetch,
+  proxyAuthenticatedResponse,
 } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
-  let access = request.cookies.get(ACCESS_COOKIE)?.value;
-  const refresh = request.cookies.get(REFRESH_COOKIE)?.value;
+  const result = await authenticatedApiFetch(
+    request,
+    "/api/v1/accounts/users/me/"
+  );
+  if (!result.response.ok) return proxyAuthenticatedResponse(result);
 
-  if (!access) {
-    return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
-  }
+  const user = await result.response.json();
+  return applyAuthResult(NextResponse.json({ user }), result);
+}
 
-  let userResponse = await getCurrentUser(access);
-  if (userResponse.status === 401 && refresh) {
-    const refreshResponse = await fetch(`${apiBaseUrl}/api/v1/auth/token/refresh/`, {
-      method: "POST",
+export async function PATCH(request: NextRequest) {
+  return proxyAuthenticatedResponse(
+    await authenticatedApiFetch(request, "/api/v1/accounts/users/me/", {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh }),
-      cache: "no-store",
-    });
-
-    if (refreshResponse.ok) {
-      const refreshed = (await refreshResponse.json()) as { access: string };
-      access = refreshed.access;
-      userResponse = await getCurrentUser(access);
-      if (userResponse.ok) {
-        const response = NextResponse.json({ user: await userResponse.json() });
-        setAuthCookies(response, access, refresh);
-        return response;
-      }
-    }
-  }
-
-  if (!userResponse.ok) {
-    const response = NextResponse.json({ detail: "Authentication required." }, { status: 401 });
-    clearAuthCookies(response);
-    return response;
-  }
-
-  return NextResponse.json({ user: await userResponse.json() });
+      body: JSON.stringify(await request.json()),
+    })
+  );
 }

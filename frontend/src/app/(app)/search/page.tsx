@@ -91,7 +91,7 @@ const navPages = [
   { title: "Products", path: "/products", icon: IconPackage },
   { title: "Reports", path: "/reports", icon: IconReportAnalytics },
   { title: "Roles & Permissions", path: "/roles", icon: IconShieldLock },
-  { title: "Team", path: "/team", icon: IconUsersGroup },
+  { title: "Users", path: "/team", icon: IconUsersGroup },
   { title: "Integrations", path: "/integrations", icon: IconPlugConnected },
   { title: "Invoices", path: "/invoices", icon: IconReceipt2 },
   { title: "Notifications", path: "/notifications", icon: IconBell },
