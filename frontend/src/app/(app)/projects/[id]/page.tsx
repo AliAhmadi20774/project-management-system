@@ -14,12 +14,15 @@ export default async function ProjectDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; from?: string }>;
 }) {
   const { id } = await params;
-  const { tab } = await searchParams;
+  const { tab, from } = await searchParams;
   const project: Project | undefined = getProjectById(id);
   if (!project) notFound();
 
-  return <ProjectDetail project={project} initialWorkspaceTab={tab === "members" ? "members" : "overview"} />;
+  const initialWorkspaceTab = ["overview", "board", "list", "timeline", "members", "activity"].includes(tab ?? "")
+    ? tab as "overview" | "board" | "list" | "timeline" | "members" | "activity"
+    : "overview";
+  return <ProjectDetail project={project} initialWorkspaceTab={initialWorkspaceTab} fromProjectTimeline={from === "project-timeline"} />;
 }

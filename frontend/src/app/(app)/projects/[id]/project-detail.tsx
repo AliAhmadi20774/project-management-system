@@ -5,18 +5,22 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   IconArrowLeft,
-  IconShare3,
   IconSettings,
   IconStar,
   IconStarFilled,
   IconPlus,
   IconCalendarDue,
+  IconClock,
 } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,10 +49,7 @@ import {
   type TaskStatus,
   type TeamMember,
 } from "@/data";
-import {
-  ProjectWorkspace,
-  type TaskActions,
-} from "./project-workspace";
+import { ProjectWorkspace, type TaskActions } from "./project-workspace";
 
 const STATUS_DOT: Record<ProjectStatus, string> = {
   "On Track": "bg-foreground",
@@ -67,7 +68,10 @@ const TASK_STATUSES: TaskStatus[] = [
 const TASK_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Urgent"];
 const MS_DAY = 86_400_000;
 
-const API_TASK_STATUS: Record<TaskStatus, "backlog" | "todo" | "in_progress" | "in_review" | "done"> = {
+const API_TASK_STATUS: Record<
+  TaskStatus,
+  "backlog" | "todo" | "in_progress" | "in_review" | "done"
+> = {
   Backlog: "backlog",
   Todo: "todo",
   "In Progress": "in_progress",
@@ -90,11 +94,24 @@ const WORKSPACE_TASK_PRIORITY: Record<string, TaskPriority> = {
   urgent: "Urgent",
 };
 
-const API_TASK_PRIORITY: Record<TaskPriority, "low" | "medium" | "high" | "urgent"> = {
+const API_TASK_PRIORITY: Record<
+  TaskPriority,
+  "low" | "medium" | "high" | "urgent"
+> = {
   Low: "low",
   Medium: "medium",
   High: "high",
   Urgent: "urgent",
+};
+
+const API_PROJECT_STATUS: Record<
+  ProjectStatus,
+  "planning" | "active" | "on_hold" | "completed"
+> = {
+  "On Track": "active",
+  "At Risk": "on_hold",
+  Delayed: "on_hold",
+  Completed: "completed",
 };
 
 function getBackendProjectId(projectId: string) {
@@ -116,6 +133,14 @@ function formatDate(iso: string) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function formatLoggedTime(totalMinutes: number) {
+  const minutes = Math.max(0, Math.round(totalMinutes));
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours === 0) return `${remainingMinutes}m`;
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +214,16 @@ function AddTaskDialog({
       toast.error("Task progress must be between 0% and 100%.");
       return;
     }
-    onCreate({ title: title.trim(), status, priority, assigneeId, weight, progress, startDate, endDate });
+    onCreate({
+      title: title.trim(),
+      status,
+      priority,
+      assigneeId,
+      weight,
+      progress,
+      startDate,
+      endDate,
+    });
     onOpenChange(false);
   }
 
@@ -219,12 +253,22 @@ function AddTaskDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="task-start-date">Start date</Label>
-                <Input id="task-start-date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <Input
+                  id="task-start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
               </div>
 
               <div className="grid gap-2">
                 <Label htmlFor="task-end-date">End date</Label>
-                <Input id="task-end-date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                <Input
+                  id="task-end-date"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
               </div>
 
               <div className="grid gap-2">
@@ -307,7 +351,9 @@ function AddTaskDialog({
                   value={progress}
                   onChange={(event) => setProgress(Number(event.target.value))}
                 />
-                <p className="text-xs text-muted-foreground">Applied to the project after observer approval.</p>
+                <p className="text-xs text-muted-foreground">
+                  Applied to the project after observer approval.
+                </p>
               </div>
             </div>
           </div>
@@ -358,7 +404,11 @@ function EditTaskDialog({
     setTitle(task.title);
     setStatus(task.status);
     setPriority(task.priority);
-    setAssigneeId(task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id);
+    setAssigneeId(
+      task.assignee.id.startsWith("unassigned")
+        ? "unassigned"
+        : task.assignee.id,
+    );
     setWeight(task.weight ?? 1);
     setProgress(task.reportedProgress ?? task.approvedProgress ?? 0);
     setStartDate(task.start);
@@ -368,16 +418,30 @@ function EditTaskDialog({
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!task || !title.trim()) return toast.error("Task title is required.");
-    if (startDate && endDate && endDate < startDate) return toast.error("End date must be on or after the start date.");
-    if (!Number.isInteger(weight) || weight < 1 || weight > 100) return toast.error("Weight must be between 1% and 100%.");
-    if (!Number.isInteger(progress) || progress < 0 || progress > 100) return toast.error("Progress must be between 0% and 100%.");
+    if (startDate && endDate && endDate < startDate)
+      return toast.error("End date must be on or after the start date.");
+    if (!Number.isInteger(weight) || weight < 1 || weight > 100)
+      return toast.error("Weight must be between 1% and 100%.");
+    if (!Number.isInteger(progress) || progress < 0 || progress > 100)
+      return toast.error("Progress must be between 0% and 100%.");
     setSaving(true);
     try {
-      await onSave(task, { title: title.trim(), status, priority, assigneeId, weight, progress, startDate, endDate });
+      await onSave(task, {
+        title: title.trim(),
+        status,
+        priority,
+        assigneeId,
+        weight,
+        progress,
+        startDate,
+        endDate,
+      });
       onOpenChange(false);
       toast.success("Task updated");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update task.");
+      toast.error(
+        error instanceof Error ? error.message : "Could not update task.",
+      );
     } finally {
       setSaving(false);
     }
@@ -387,18 +451,108 @@ function EditTaskDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit}>
-          <DialogHeader><DialogTitle>Edit task</DialogTitle><DialogDescription>Update this task&apos;s details and progress.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Edit task</DialogTitle>
+            <DialogDescription>
+              Update this task&apos;s details and progress.
+            </DialogDescription>
+          </DialogHeader>
           <div className="grid gap-3 py-4 sm:grid-cols-2">
-            <div className="grid gap-2 sm:col-span-2"><Label>Title</Label><Input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus /></div>
-            <div className="grid gap-2"><Label>Status</Label><Select value={status} onValueChange={(value) => setStatus(value as TaskStatus)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_STATUSES.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid gap-2"><Label>Priority</Label><Select value={priority} onValueChange={(value) => setPriority(value as TaskPriority)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TASK_PRIORITIES.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid gap-2"><Label>Assignee</Label><Select value={assigneeId} onValueChange={setAssigneeId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="unassigned">Unassigned</SelectItem>{roster.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid gap-2"><Label>Weight (%)</Label><Input type="number" min="1" max="100" value={weight} onChange={(event) => setWeight(Number(event.target.value))} /></div>
-            <div className="grid gap-2"><Label>Start date</Label><Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></div>
-            <div className="grid gap-2"><Label>End date</Label><Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></div>
+            <div className="grid gap-2 sm:col-span-2">
+              <Label>Title</Label>
+              <Input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Status</Label>
+              <Select
+                value={status}
+                onValueChange={(value) => setStatus(value as TaskStatus)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TASK_STATUSES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Priority</Label>
+              <Select
+                value={priority}
+                onValueChange={(value) => setPriority(value as TaskPriority)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TASK_PRIORITIES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Assignee</Label>
+              <Select value={assigneeId} onValueChange={setAssigneeId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {roster.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Weight (%)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="100"
+                value={weight}
+                onChange={(event) => setWeight(Number(event.target.value))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Start date</Label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>End date</Label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </div>
             <div className="grid gap-2 sm:col-span-2">
               <Label>Task progress (%)</Label>
-              <Input type="number" min="0" max="100" value={progress} onChange={(event) => setProgress(Number(event.target.value))} />
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={progress}
+                onChange={(event) => setProgress(Number(event.target.value))}
+              />
               <p className="text-xs text-muted-foreground">
                 {isSystemAdmin
                   ? "System administrator updates are approved immediately."
@@ -406,7 +560,19 @@ function EditTaskDialog({
               </p>
             </div>
           </div>
-          <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Updating..." : "Update task"}</Button></DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Updating..." : "Update task"}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -417,19 +583,444 @@ function EditTaskDialog({
 // Detail view (header + interactive workspace)
 // ---------------------------------------------------------------------------
 
-export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "overview" }: { project: Project; initialWorkspaceTab?: "overview" | "members" }) {
+type ProjectSettingsInput = {
+  name: string;
+  code: string;
+  category: string;
+  description: string;
+  status: ProjectStatus;
+  start: string;
+  due: string;
+};
+
+function TimeLogDialog({
+  tasks,
+  selectedTask,
+  members,
+  currentUserId,
+  canChooseUser,
+  open,
+  onOpenChange,
+  onLogged,
+}: {
+  tasks: Task[];
+  selectedTask: Task | null;
+  members: TeamMember[];
+  currentUserId?: string;
+  canChooseUser: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onLogged: (durationMinutes: number, taskId: number) => void;
+}) {
+  const [taskId, setTaskId] = useState("");
+  const [userId, setUserId] = useState(currentUserId ?? "");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [hours, setHours] = useState("1");
+  const [minutes, setMinutes] = useState("0");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setTaskId(String(selectedTask?.backendId ?? tasks[0]?.backendId ?? ""));
+      setUserId(currentUserId ?? members[0]?.id ?? "");
+      setDate(new Date().toISOString().slice(0, 10));
+      setHours("1");
+      setMinutes("0");
+      setNotes("");
+    }
+  }, [open, selectedTask, tasks, currentUserId, members]);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const hourValue = Number(hours);
+    const minuteValue = Number(minutes);
+    const durationMinutes = hourValue * 60 + minuteValue;
+    if (!taskId) return toast.error("Choose a task first.");
+    if (
+      !Number.isInteger(hourValue) ||
+      !Number.isInteger(minuteValue) ||
+      hourValue < 0 ||
+      hourValue > 24 ||
+      minuteValue < 0 ||
+      minuteValue > 59 ||
+      durationMinutes < 1 ||
+      durationMinutes > 24 * 60
+    )
+      return toast.error("Enter a duration between 1 minute and 24 hours.");
+    setSaving(true);
+    try {
+      const response = await fetch("/api/time-entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: Number(taskId),
+          user: userId,
+          work_date: date,
+          duration_minutes: durationMinutes,
+          notes,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(
+          typeof data.detail === "string" ? data.detail : "Could not log time.",
+        );
+      toast.success("Time logged");
+      onLogged(durationMinutes, Number(taskId));
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not log time.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <form onSubmit={submit}>
+          <DialogHeader>
+            <DialogTitle>Log time</DialogTitle>
+            <DialogDescription>Record time against a task.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Task</Label>
+              <Select value={taskId} onValueChange={setTaskId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a task" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tasks
+                    .filter((task) => task.backendId)
+                    .map((task) => (
+                      <SelectItem key={task.id} value={String(task.backendId)}>
+                        {task.title}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {canChooseUser && (
+              <div className="grid gap-2">
+                <Label>Team member</Label>
+                <Select value={userId} onValueChange={setUserId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {members.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {member.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="grid gap-2">
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className="col-span-1"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Hours</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="24"
+                  step="1"
+                  value={hours}
+                  onChange={(event) => setHours(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Minutes</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="59"
+                  step="1"
+                  value={minutes}
+                  onChange={(event) => setMinutes(event.target.value)}
+                />
+              </div>
+            </div>
+            <p className="-mt-2 text-xs text-muted-foreground">
+              Each entry can be from 1 minute up to 24 hours.
+            </p>
+            <div className="grid gap-2">
+              <Label>
+                Note <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea
+                rows={2}
+                maxLength={500}
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="What did you work on?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving || !taskId}>
+              {saving ? "Saving…" : "Log time"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProjectSettingsDialog({
+  project,
+  open,
+  onOpenChange,
+  onSave,
+}: {
+  project: Project;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (input: ProjectSettingsInput) => Promise<void>;
+}) {
+  const [form, setForm] = useState<ProjectSettingsInput>({
+    name: project.name,
+    code: project.key,
+    category: project.category,
+    description: project.description,
+    status: project.status,
+    start: project.start,
+    due: project.due,
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setForm({
+        name: project.name,
+        code: project.key,
+        category: project.category,
+        description: project.description,
+        status: project.status,
+        start: project.start,
+        due: project.due,
+      });
+    }
+  }, [open, project]);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!form.name.trim() || !form.code.trim()) {
+      toast.error("Project name and code are required.");
+      return;
+    }
+    if (form.start && form.due && form.due < form.start) {
+      toast.error("Due date must be on or after the start date.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({
+        ...form,
+        name: form.name.trim(),
+        code: form.code.trim().toUpperCase(),
+      });
+      onOpenChange(false);
+      toast.success("Project updated");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not update project.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <form onSubmit={submit}>
+          <DialogHeader>
+            <DialogTitle>Project settings</DialogTitle>
+            <DialogDescription>
+              Edit this project&apos;s details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
+              <div className="grid gap-2">
+                <Label htmlFor="project-settings-name">Name</Label>
+                <Input
+                  id="project-settings-name"
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="project-settings-code">Code</Label>
+                <Input
+                  id="project-settings-code"
+                  value={form.code}
+                  maxLength={12}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      code: event.target.value.toUpperCase(),
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="project-settings-category">Category</Label>
+                <Input
+                  id="project-settings-category"
+                  value={form.category}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      category: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Status</Label>
+                <Select
+                  value={form.status}
+                  onValueChange={(status) =>
+                    setForm((current) => ({
+                      ...current,
+                      status: status as ProjectStatus,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(STATUS_DOT).map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="project-settings-description">Description</Label>
+              <Textarea
+                id="project-settings-description"
+                value={form.description}
+                rows={3}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="project-settings-start">Start date</Label>
+                <Input
+                  id="project-settings-start"
+                  type="date"
+                  value={form.start}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      start: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="project-settings-due">Due date</Label>
+                <Input
+                  id="project-settings-due"
+                  type="date"
+                  value={form.due}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      due: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ProjectDetail({
+  project: seedProject,
+  initialWorkspaceTab = "overview",
+  fromProjectTimeline = false,
+}: {
+  project: Project;
+  initialWorkspaceTab?:
+    "overview" | "board" | "list" | "timeline" | "members" | "activity";
+  fromProjectTimeline?: boolean;
+}) {
   const { user } = useAuth();
   const [liveProject, setLiveProject] = useState<Project | null>(null);
   const [roster, setRoster] = useState<TeamMember[]>([]);
+  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
   const [canManageMembers, setCanManageMembers] = useState(false);
-  const [memberCandidates, setMemberCandidates] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [memberCandidates, setMemberCandidates] = useState<
+    Array<{ id: string; name: string; email: string }>
+  >([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectProgress, setProjectProgress] = useState(seedProject.progress);
-  const [projectTaskCounts, setProjectTaskCounts] = useState(seedProject.taskCounts);
+  const [projectTaskCounts, setProjectTaskCounts] = useState(
+    seedProject.taskCounts,
+  );
+  const [totalTimeMinutes, setTotalTimeMinutes] = useState(0);
   const idRef = useRef(1000);
 
   const [starred, setStarred] = useState(Boolean(seedProject.starred));
+  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+  const [timeLogOpen, setTimeLogOpen] = useState(false);
+  const [timeTask, setTimeTask] = useState<Task | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addStatus, setAddStatus] = useState<TaskStatus>("Todo");
   const [addStatusLocked, setAddStatusLocked] = useState(false);
@@ -445,100 +1036,161 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
       setMembersLoaded(false);
       setLiveProject(null);
       try {
-        const [membersResponse, tasksResponse, projectResponse] = await Promise.all([
-          fetch(`/api/project-memberships?project=${backendProjectId}`, { cache: "no-store" }),
-          fetch(`/api/tasks?project=${backendProjectId}`, { cache: "no-store" }),
-          fetch(`/api/projects/${backendProjectId}`, { cache: "no-store" }),
-        ]);
+        const [membersResponse, tasksResponse, projectResponse] =
+          await Promise.all([
+            fetch(`/api/project-memberships?project=${backendProjectId}`, {
+              cache: "no-store",
+            }),
+            fetch(`/api/tasks?project=${backendProjectId}`, {
+              cache: "no-store",
+            }),
+            fetch(`/api/projects/${backendProjectId}`, { cache: "no-store" }),
+          ]);
         const [membersData, tasksData, projectData] = await Promise.all([
           membersResponse.json(),
           tasksResponse.json(),
           projectResponse.json(),
         ]);
-        if (!membersResponse.ok) throw new Error(membersData.detail || "Could not load project members.");
-        if (!tasksResponse.ok) throw new Error(tasksData.detail || "Could not load tasks.");
-        if (!projectResponse.ok) throw new Error(projectData.detail || "Could not load project progress.");
+        if (!membersResponse.ok)
+          throw new Error(
+            membersData.detail || "Could not load project members.",
+          );
+        if (!tasksResponse.ok)
+          throw new Error(tasksData.detail || "Could not load tasks.");
+        if (!projectResponse.ok)
+          throw new Error(
+            projectData.detail || "Could not load project progress.",
+          );
 
-        const memberships = Array.isArray(membersData) ? membersData : membersData.results || [];
-        const members: TeamMember[] = memberships.map((item: { id: number; user: number; user_name: string; user_email: string; user_avatar_url?: string; role: string }) => ({
-          membershipId: item.id,
-          id: String(item.user),
-          name: item.user_name,
-          role: item.role,
-          department: "Project",
-          email: item.user_email,
-          avatar: item.user_avatar_url || "/avatars/default-young-man.png",
-          status: "Active",
-          location: "",
-        }));
-        const items = Array.isArray(tasksData) ? tasksData : tasksData.results || [];
+        const memberships = Array.isArray(membersData)
+          ? membersData
+          : membersData.results || [];
+        const members: TeamMember[] = memberships.map(
+          (item: {
+            id: number;
+            user: number;
+            user_name: string;
+            user_email: string;
+            user_avatar_url?: string;
+            role: string;
+          }) => ({
+            membershipId: item.id,
+            id: String(item.user),
+            name: item.user_name,
+            role: item.role,
+            department: "Project",
+            email: item.user_email,
+            avatar: item.user_avatar_url || "/avatars/default-young-man.png",
+            status: "Active",
+            location: "",
+          }),
+        );
+        const items = Array.isArray(tasksData)
+          ? tasksData
+          : tasksData.results || [];
         if (cancelled) return;
 
         setRoster(members);
-        setTasks(items.map((item: { id: number; title: string; status: string; priority: string; assignee: number | null; assignee_name: string | null; assignee_avatar_url: string | null; start_date: string | null; end_date: string | null; weight: number; approved_progress: number; reported_progress: number; progress_state: Task["progressState"] }) => ({
-          id: `${seedProject.key}-${item.id}`,
-          backendId: item.id,
-          title: item.title,
-          status: WORKSPACE_TASK_STATUS[item.status] || "Todo",
-          priority: WORKSPACE_TASK_PRIORITY[item.priority] || "Medium",
-          assignee: members.find((member) => member.id === String(item.assignee)) ?? (item.assignee ? {
-            id: String(item.assignee),
-            name: item.assignee_name || "Unknown user",
-            role: "",
-            department: "",
-            email: "",
-            avatar: item.assignee_avatar_url || "/avatars/default-young-man.png",
-            status: "Active",
-            location: "",
-          } : {
-            id: `unassigned-${item.id}`,
-            name: "Unassigned",
-            role: "",
-            department: "",
-            email: "",
-            avatar: "",
-            status: "Offline",
-            location: "",
-          }),
-          labels: [],
-          projectId: seedProject.id,
-          start: item.start_date || "",
-          due: item.end_date || "",
-          points: 3,
-          weight: item.weight,
-          approvedProgress: item.approved_progress,
-          reportedProgress: item.reported_progress,
-          progressState: item.progress_state,
-          comments: 0,
-          subtasks: { total: 0, done: 0 },
-        })));
+        setTasks(
+          items.map(
+            (item: {
+              id: number;
+              title: string;
+              status: string;
+              priority: string;
+              assignee: number | null;
+              assignee_name: string | null;
+              assignee_avatar_url: string | null;
+              start_date: string | null;
+              end_date: string | null;
+              weight: number;
+              approved_progress: number;
+              reported_progress: number;
+              progress_state: Task["progressState"];
+              total_time_minutes: number;
+            }) => ({
+              id: `${seedProject.key}-${item.id}`,
+              backendId: item.id,
+              title: item.title,
+              status: WORKSPACE_TASK_STATUS[item.status] || "Todo",
+              priority: WORKSPACE_TASK_PRIORITY[item.priority] || "Medium",
+              assignee:
+                members.find((member) => member.id === String(item.assignee)) ??
+                (item.assignee
+                  ? {
+                      id: String(item.assignee),
+                      name: item.assignee_name || "Unknown user",
+                      role: "",
+                      department: "",
+                      email: "",
+                      avatar:
+                        item.assignee_avatar_url ||
+                        "/avatars/default-young-man.png",
+                      status: "Active",
+                      location: "",
+                    }
+                  : {
+                      id: `unassigned-${item.id}`,
+                      name: "Unassigned",
+                      role: "",
+                      department: "",
+                      email: "",
+                      avatar: "",
+                      status: "Offline",
+                      location: "",
+                    }),
+              labels: [],
+              projectId: seedProject.id,
+              start: item.start_date || "",
+              due: item.end_date || "",
+              points: 3,
+              weight: item.weight,
+              totalTimeMinutes: item.total_time_minutes ?? 0,
+              approvedProgress: item.approved_progress,
+              reportedProgress: item.reported_progress,
+              progressState: item.progress_state,
+              comments: 0,
+              subtasks: { total: 0, done: 0 },
+            }),
+          ),
+        );
         setProjectProgress(projectData.progress);
         setProjectTaskCounts({
           total: projectData.task_count,
           done: projectData.completed_task_count,
         });
+        setTotalTimeMinutes(projectData.total_time_minutes ?? 0);
         setStarred(Boolean(projectData.is_starred));
-        const projectLead = members.find((member) => member.role === "lead") ?? members[0] ?? {
-          id: "unassigned",
-          name: "Unassigned",
-          role: "",
-          department: "",
-          email: "",
-          avatar: "/avatars/default-young-man.png",
-          status: "Offline" as const,
-          location: "",
-        };
+        const projectLead = members.find((member) => member.role === "lead") ??
+          members[0] ?? {
+            id: "unassigned",
+            name: "Unassigned",
+            role: "",
+            department: "",
+            email: "",
+            avatar: "/avatars/default-young-man.png",
+            status: "Offline" as const,
+            location: "",
+          };
         setLiveProject({
           ...seedProject,
           name: projectData.name,
           key: projectData.code,
           description: projectData.description,
           category: projectData.category || "General",
-          status: projectData.status === "completed" ? "Completed" : projectData.status === "on_hold" ? "At Risk" : "On Track",
+          status:
+            projectData.status === "completed"
+              ? "Completed"
+              : projectData.status === "on_hold"
+                ? "At Risk"
+                : "On Track",
           progress: projectData.progress,
           start: projectData.start_date || "",
           due: projectData.end_date || "",
-          taskCounts: { total: projectData.task_count, done: projectData.completed_task_count },
+          taskCounts: {
+            total: projectData.task_count,
+            done: projectData.completed_task_count,
+          },
           lead: projectLead,
           members,
           budget: 0,
@@ -549,15 +1201,24 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
         const mayManageMembers = Boolean(projectData.can_manage_members);
         setCanManageMembers(mayManageMembers);
         if (mayManageMembers) {
-          const candidatesResponse = await fetch(`/api/project-memberships/candidates?project=${backendProjectId}`, { cache: "no-store" });
+          const candidatesResponse = await fetch(
+            `/api/project-memberships/candidates?project=${backendProjectId}`,
+            { cache: "no-store" },
+          );
           const candidatesData = await candidatesResponse.json();
           if (!cancelled && candidatesResponse.ok) {
-            const candidates = Array.isArray(candidatesData) ? candidatesData : candidatesData.results || [];
-            setMemberCandidates(candidates.map((candidate: { id: number; name: string; email: string }) => ({
-              id: String(candidate.id),
-              name: candidate.name,
-              email: candidate.email,
-            })));
+            const candidates = Array.isArray(candidatesData)
+              ? candidatesData
+              : candidatesData.results || [];
+            setMemberCandidates(
+              candidates.map(
+                (candidate: { id: number; name: string; email: string }) => ({
+                  id: String(candidate.id),
+                  name: candidate.name,
+                  email: candidate.email,
+                }),
+              ),
+            );
           }
         } else {
           setMemberCandidates([]);
@@ -566,7 +1227,11 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
       } catch (error) {
         if (!cancelled) {
           setMembersLoaded(true);
-          toast.error(error instanceof Error ? error.message : "Could not load project data.");
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Could not load project data.",
+          );
         }
       }
     }
@@ -605,7 +1270,8 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
           title: input.title,
           status: API_TASK_STATUS[input.status],
           priority: API_TASK_PRIORITY[input.priority],
-          assignee: input.assigneeId === "unassigned" ? null : Number(input.assigneeId),
+          assignee:
+            input.assigneeId === "unassigned" ? null : Number(input.assigneeId),
           weight: input.weight,
           initial_progress: input.progress,
           start_date: input.startDate || null,
@@ -614,11 +1280,14 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Could not create task.");
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : "Could not create task.",
+        );
       }
 
-    const assignee =
-      roster.find((m) => m.id === input.assigneeId) ?? {
+      const assignee = roster.find((m) => m.id === input.assigneeId) ?? {
         id: "unassigned-new-task",
         name: "Unassigned",
         role: "",
@@ -628,61 +1297,130 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
         status: "Offline" as const,
         location: "",
       };
-    const id = `${project.key}-${data.id ?? idRef.current++}`;
-    const now = Date.now();
-    const task: Task = {
-      id,
-      backendId: data.id,
-      title: input.title,
-      status: input.status,
-      priority: input.priority,
-      assignee,
-      labels: [],
-      projectId: project.id,
-      start: input.startDate || new Date(now).toISOString().slice(0, 10),
-      due: input.endDate || new Date(now + 7 * MS_DAY).toISOString().slice(0, 10),
-      points: 0,
-      weight: input.weight,
-      approvedProgress: data.approved_progress ?? 0,
-      reportedProgress: data.reported_progress ?? input.progress,
-      progressState: data.progress_state,
-      comments: 0,
-      subtasks: { total: 0, done: 0 },
-    };
-    setTasks((prev) => [task, ...prev]);
-    toast.success("Task created", {
-      description: `${id} · ${input.title} → ${input.status}`,
-    });
+      const id = `${project.key}-${data.id ?? idRef.current++}`;
+      const now = Date.now();
+      const task: Task = {
+        id,
+        backendId: data.id,
+        title: input.title,
+        status: input.status,
+        priority: input.priority,
+        assignee,
+        labels: [],
+        projectId: project.id,
+        start: input.startDate || new Date(now).toISOString().slice(0, 10),
+        due:
+          input.endDate ||
+          new Date(now + 7 * MS_DAY).toISOString().slice(0, 10),
+        points: 0,
+        weight: input.weight,
+        approvedProgress: data.approved_progress ?? 0,
+        reportedProgress: data.reported_progress ?? input.progress,
+        progressState: data.progress_state,
+        comments: 0,
+        subtasks: { total: 0, done: 0 },
+      };
+      setTasks((prev) => [task, ...prev]);
+      toast.success("Task created", {
+        description: `${id} · ${input.title} → ${input.status}`,
+      });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not create task.");
+      toast.error(
+        error instanceof Error ? error.message : "Could not create task.",
+      );
     }
+  }
+
+  async function updateProjectSettings(input: ProjectSettingsInput) {
+    const backendProjectId = getBackendProjectId(project.id);
+    if (!backendProjectId)
+      throw new Error("This project is not connected to the API.");
+    const response = await fetch(`/api/projects/${backendProjectId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: input.name,
+        code: input.code,
+        category: input.category,
+        description: input.description,
+        status: API_PROJECT_STATUS[input.status],
+        start_date: input.start || null,
+        end_date: input.due || null,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        typeof data.detail === "string"
+          ? data.detail
+          : "Could not update project.",
+      );
+    }
+    setLiveProject(
+      (current) =>
+        current && {
+          ...current,
+          name: data.name,
+          key: data.code,
+          category: data.category,
+          description: data.description,
+          status: input.status,
+          start: data.start_date || "",
+          due: data.end_date || "",
+        },
+    );
   }
 
   const currentRoles = roster
     .filter((member) => member.id === String(user?.id))
     .map((member) => member.role);
   const isSystemAdmin = Boolean(user?.is_superuser);
+  const isProjectMember = roster.some(
+    (member) => member.id === String(user?.id),
+  );
   const canSubmitProgress = isSystemAdmin || currentRoles.includes("lead");
   const canReviewProgress = isSystemAdmin || currentRoles.includes("observer");
 
   const actions: TaskActions = {
+    onLogTime:
+      isProjectMember || isSystemAdmin
+        ? (task) => {
+            setTimeTask(task);
+            setTimeLogOpen(true);
+          }
+        : undefined,
     onOpen: (task) => {
       if (!canSubmitProgress) {
-        toast.error("Only the project lead or system administrator can edit tasks.");
+        toast.error(
+          "Only the project lead or system administrator can edit tasks.",
+        );
         return;
       }
       setEditingTask(task);
     },
     onDuplicate: async (task) => {
       if (!canSubmitProgress) {
-        toast.error("Only the project lead or system administrator can duplicate tasks.");
+        toast.error(
+          "Only the project lead or system administrator can duplicate tasks.",
+        );
         return;
       }
-      if (!task.backendId) throw new Error("This task is not connected to the API.");
-      const response = await fetch(`/api/tasks/${task.backendId}?action=duplicate`, { method: "POST" });
+      if (!task.backendId)
+        throw new Error("This task is not connected to the API.");
+      const response = await fetch(
+        `/api/tasks/${task.backendId}?action=duplicate`,
+        { method: "POST" },
+      );
       const data = await response.json();
-      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Could not duplicate task.");
-      const assignee = roster.find((member) => member.id === String(data.assignee)) ?? {
+      if (!response.ok)
+        throw new Error(
+          typeof data.detail === "string"
+            ? data.detail
+            : "Could not duplicate task.",
+        );
+      const assignee = roster.find(
+        (member) => member.id === String(data.assignee),
+      ) ?? {
         id: `unassigned-${data.id}`,
         name: "Unassigned",
         role: "",
@@ -708,19 +1446,25 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
         progressState: data.progress_state,
       };
       setTasks((current) => [copy, ...current]);
-      toast.success("Task duplicated", { description: `${copy.id} created with ${copy.weight}% weight.` });
+      toast.success("Task duplicated", {
+        description: `${copy.id} created with ${copy.weight}% weight.`,
+      });
     },
     onDelete: (task) => setPendingDelete(task),
   };
 
   async function updateTaskProgress(task: Task, progress: number) {
-    if (!task.backendId) throw new Error("This task is not connected to the API.");
+    if (!task.backendId)
+      throw new Error("This task is not connected to the API.");
 
-    const response = await fetch(`/api/tasks/${task.backendId}?action=submit-progress`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ progress }),
-    });
+    const response = await fetch(
+      `/api/tasks/${task.backendId}?action=submit-progress`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ progress }),
+      },
+    );
     const responseText = await response.text();
     let data: {
       detail?: string;
@@ -734,11 +1478,15 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
       throw new Error(
         response.status === 404
           ? "The progress API route is unavailable. Please refresh and try again."
-          : "The server returned an invalid response."
+          : "The server returned an invalid response.",
       );
     }
     if (!response.ok) {
-      throw new Error(typeof data.detail === "string" ? data.detail : "Could not update progress.");
+      throw new Error(
+        typeof data.detail === "string"
+          ? data.detail
+          : "Could not update progress.",
+      );
     }
 
     setTasks((current) =>
@@ -750,18 +1498,24 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
               reportedProgress: data.reported_progress,
               progressState: data.progress_state,
             }
-          : item
-      )
+          : item,
+      ),
     );
 
     if (data.progress_state === "approved") {
       const backendProjectId = getBackendProjectId(project.id);
-      const projectResponse = await fetch(`/api/projects/${backendProjectId}`, { cache: "no-store" });
+      const projectResponse = await fetch(`/api/projects/${backendProjectId}`, {
+        cache: "no-store",
+      });
       const projectData = await projectResponse.json();
       if (projectResponse.ok) setProjectProgress(projectData.progress);
-      toast.success("Progress updated", { description: `${task.title}: ${progress}%` });
+      toast.success("Progress updated", {
+        description: `${task.title}: ${progress}%`,
+      });
     } else {
-      toast.success("Progress submitted for review", { description: `${task.title}: ${progress}%` });
+      toast.success("Progress submitted for review", {
+        description: `${task.title}: ${progress}%`,
+      });
     }
   }
 
@@ -775,9 +1529,10 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
       start: string;
       due: string;
       weight: number;
-    }
+    },
   ) {
-    if (!task.backendId) throw new Error("This task is not connected to the API.");
+    if (!task.backendId)
+      throw new Error("This task is not connected to the API.");
     const response = await fetch(`/api/tasks/${task.backendId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -785,7 +1540,8 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
         title: input.title,
         status: API_TASK_STATUS[input.status],
         priority: API_TASK_PRIORITY[input.priority],
-        assignee: input.assigneeId === "unassigned" ? null : Number(input.assigneeId),
+        assignee:
+          input.assigneeId === "unassigned" ? null : Number(input.assigneeId),
         start_date: input.start || null,
         end_date: input.due || null,
         weight: input.weight,
@@ -793,7 +1549,11 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(typeof data.detail === "string" ? data.detail : "Could not update task details.");
+      throw new Error(
+        typeof data.detail === "string"
+          ? data.detail
+          : "Could not update task details.",
+      );
     }
     setTasks((current) =>
       current.map((item) =>
@@ -802,27 +1562,31 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
               ...item,
               title: data.title,
               status: WORKSPACE_TASK_STATUS[data.status] || input.status,
-              priority: WORKSPACE_TASK_PRIORITY[data.priority] || input.priority,
+              priority:
+                WORKSPACE_TASK_PRIORITY[data.priority] || input.priority,
               start: data.start_date || project.start,
               due: data.end_date || project.due,
               weight: data.weight,
-              assignee:
-                roster.find((member) => member.id === String(data.assignee)) ?? {
-                  id: `unassigned-${data.id}`,
-                  name: "Unassigned",
-                  role: "",
-                  department: "",
-                  email: "",
-                  avatar: "",
-                  status: "Offline",
-                  location: "",
-                },
+              assignee: roster.find(
+                (member) => member.id === String(data.assignee),
+              ) ?? {
+                id: `unassigned-${data.id}`,
+                name: "Unassigned",
+                role: "",
+                department: "",
+                email: "",
+                avatar: "",
+                status: "Offline",
+                location: "",
+              },
             }
-          : item
-      )
+          : item,
+      ),
     );
     const backendProjectId = getBackendProjectId(project.id);
-    const projectResponse = await fetch(`/api/projects/${backendProjectId}`, { cache: "no-store" });
+    const projectResponse = await fetch(`/api/projects/${backendProjectId}`, {
+      cache: "no-store",
+    });
     const projectData = await projectResponse.json();
     if (projectResponse.ok) {
       setProjectProgress(projectData.progress);
@@ -834,15 +1598,23 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
   }
 
   async function reviewTaskProgress(task: Task, approved: boolean) {
-    if (!task.backendId) throw new Error("This task is not connected to the API.");
-    const response = await fetch(`/api/tasks/${task.backendId}?action=review-progress`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approved }),
-    });
+    if (!task.backendId)
+      throw new Error("This task is not connected to the API.");
+    const response = await fetch(
+      `/api/tasks/${task.backendId}?action=review-progress`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      },
+    );
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(typeof data.detail === "string" ? data.detail : "Could not review progress.");
+      throw new Error(
+        typeof data.detail === "string"
+          ? data.detail
+          : "Could not review progress.",
+      );
     }
     setTasks((current) =>
       current.map((item) =>
@@ -853,26 +1625,41 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
               reportedProgress: data.reported_progress,
               progressState: data.progress_state,
             }
-          : item
-      )
+          : item,
+      ),
     );
     const backendProjectId = getBackendProjectId(project.id);
-    const projectResponse = await fetch(`/api/projects/${backendProjectId}`, { cache: "no-store" });
+    const projectResponse = await fetch(`/api/projects/${backendProjectId}`, {
+      cache: "no-store",
+    });
     const projectData = await projectResponse.json();
     if (projectResponse.ok) setProjectProgress(projectData.progress);
     toast.success(approved ? "Progress approved" : "Progress rejected");
   }
 
-  async function addProjectMember(userId: string, role: "lead" | "observer" | "member") {
+  async function addProjectMember(
+    userId: string,
+    role: "lead" | "observer" | "member",
+  ) {
     const backendProjectId = getBackendProjectId(project.id);
-    if (!backendProjectId) throw new Error("This project is not connected to the API.");
+    if (!backendProjectId)
+      throw new Error("This project is not connected to the API.");
     const response = await fetch("/api/project-memberships", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project: backendProjectId, user: Number(userId), role }),
+      body: JSON.stringify({
+        project: backendProjectId,
+        user: Number(userId),
+        role,
+      }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Could not add project member.");
+    if (!response.ok)
+      throw new Error(
+        typeof data.detail === "string"
+          ? data.detail
+          : "Could not add project member.",
+      );
     const member: TeamMember = {
       membershipId: data.id,
       id: String(data.user),
@@ -885,54 +1672,93 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
       location: "",
     };
     setRoster((current) => [...current, member]);
-    setMemberCandidates((current) => current.filter((candidate) => candidate.id !== member.id));
-    toast.success("Member added", { description: `${member.name} was added to this project.` });
+    setMemberCandidates((current) =>
+      current.filter((candidate) => candidate.id !== member.id),
+    );
+    toast.success("Member added", {
+      description: `${member.name} was added to this project.`,
+    });
   }
 
   async function removeProjectMember(member: TeamMember) {
-    if (!member.membershipId) throw new Error("This project membership is not connected to the API.");
-    const response = await fetch(`/api/project-memberships/${member.membershipId}`, { method: "DELETE" });
+    if (!member.membershipId)
+      throw new Error("This project membership is not connected to the API.");
+    const response = await fetch(
+      `/api/project-memberships/${member.membershipId}`,
+      { method: "DELETE" },
+    );
     if (!response.ok) {
       const data = await response.json();
-      throw new Error(typeof data.detail === "string" ? data.detail : "Could not remove project member.");
+      throw new Error(
+        typeof data.detail === "string"
+          ? data.detail
+          : "Could not remove project member.",
+      );
     }
     setRoster((current) => current.filter((item) => item.id !== member.id));
-    setTasks((current) => current.map((task) => task.assignee.id === member.id ? {
-      ...task,
-      assignee: {
-        id: `unassigned-${task.backendId ?? task.id}`,
-        name: "Unassigned",
-        role: "",
-        department: "",
-        email: "",
-        avatar: "",
-        status: "Offline",
-        location: "",
-      },
-    } : task));
-    setMemberCandidates((current) => [...current, { id: member.id, name: member.name, email: member.email }]);
-    toast.success("Member removed", { description: `${member.name} was removed from this project.` });
+    setTasks((current) =>
+      current.map((task) =>
+        task.assignee.id === member.id
+          ? {
+              ...task,
+              assignee: {
+                id: `unassigned-${task.backendId ?? task.id}`,
+                name: "Unassigned",
+                role: "",
+                department: "",
+                email: "",
+                avatar: "",
+                status: "Offline",
+                location: "",
+              },
+            }
+          : task,
+      ),
+    );
+    setMemberCandidates((current) => [
+      ...current,
+      { id: member.id, name: member.name, email: member.email },
+    ]);
+    toast.success("Member removed", {
+      description: `${member.name} was removed from this project.`,
+    });
   }
 
-  async function updateProjectMemberRole(member: TeamMember, role: "lead" | "observer" | "member") {
-    if (!member.membershipId) throw new Error("This project membership is not connected to the API.");
+  async function updateProjectMemberRole(
+    member: TeamMember,
+    role: "lead" | "observer" | "member",
+  ) {
+    if (!member.membershipId)
+      throw new Error("This project membership is not connected to the API.");
     if (member.role === role) return;
-    const response = await fetch(`/api/project-memberships/${member.membershipId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
-    });
+    const response = await fetch(
+      `/api/project-memberships/${member.membershipId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      },
+    );
     const data = await response.json();
     if (!response.ok) {
-      const message = typeof data.role?.[0] === "string"
-        ? data.role[0]
-        : typeof data.detail === "string" ? data.detail : "Could not update the project role.";
+      const message =
+        typeof data.role?.[0] === "string"
+          ? data.role[0]
+          : typeof data.detail === "string"
+            ? data.detail
+            : "Could not update the project role.";
       throw new Error(message);
     }
-    setRoster((current) => current.map((item) =>
-      item.membershipId === member.membershipId ? { ...item, role: data.role } : item
-    ));
-    toast.success("Project role updated", { description: `${member.name} is now ${data.role}.` });
+    setRoster((current) =>
+      current.map((item) =>
+        item.membershipId === member.membershipId
+          ? { ...item, role: data.role }
+          : item,
+      ),
+    );
+    toast.success("Project role updated", {
+      description: `${member.name} is now ${data.role}.`,
+    });
   }
 
   if (!project) {
@@ -953,6 +1779,14 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
 
   return (
     <div className="space-y-6">
+      {fromProjectTimeline && (
+        <Link
+          href="/projects/timeline"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <IconArrowLeft className="size-4" /> Back to project timeline
+        </Link>
+      )}
       {/* Header */}
       <div className="space-y-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -978,7 +1812,9 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
                   {project.key}
                 </span>
                 <Badge variant="secondary" className="gap-1.5 font-medium">
-                  <span className={`size-1.5 rounded-full ${STATUS_DOT[project.status]}`} />
+                  <span
+                    className={`size-1.5 rounded-full ${STATUS_DOT[project.status]}`}
+                  />
                   {project.status}
                 </Badge>
               </div>
@@ -996,6 +1832,10 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
                 <span className="tabular-nums">
                   {projectTaskCounts.done}/{projectTaskCounts.total} tasks done
                 </span>
+                <span className="flex items-center gap-1.5 tabular-nums">
+                  <IconClock className="size-3.5" />
+                  {formatLoggedTime(totalTimeMinutes)}
+                </span>
               </div>
             </div>
           </div>
@@ -1005,22 +1845,86 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
               {shown.map((m) => (
                 <Tooltip key={m.id}>
                   <TooltipTrigger asChild>
-                    <Link href={`/profile?user=${m.id}`} aria-label={`Open ${m.name}'s profile`}>
-                      <Avatar className="size-8 ring-2 ring-background transition-transform hover:scale-110">
-                        <AvatarImage src={m.avatar || "/avatars/default-young-man.png"} alt={m.name} />
-                        <AvatarFallback className="text-[10px]">{initials(m.name)}</AvatarFallback>
+                    <Link
+                      href={`/profile?user=${m.id}`}
+                      aria-label={`Open ${m.name}'s profile`}
+                      className="relative z-10 rounded-full transition-transform duration-150 hover:-translate-y-1 focus-visible:-translate-y-1 focus-visible:outline-none"
+                    >
+                      <Avatar className="size-8 ring-2 ring-background">
+                        <AvatarImage
+                          src={m.avatar || "/avatars/default-young-man.png"}
+                          alt={m.name}
+                        />
+                        <AvatarFallback className="text-[10px]">
+                          {initials(m.name)}
+                        </AvatarFallback>
                       </Avatar>
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent>{m.name} · {m.role}</TooltipContent>
+                  <TooltipContent>
+                    {m.name} · {m.role}
+                  </TooltipContent>
                 </Tooltip>
               ))}
               {extra > 0 && (
-                <span className="flex size-8 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-background">
+                <button
+                  type="button"
+                  className="relative z-10 flex size-8 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground ring-2 ring-background transition-all duration-150 hover:-translate-y-1 hover:bg-accent focus-visible:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Show ${extra} more project members`}
+                  onClick={() => setMemberDialogOpen(true)}
+                >
                   +{extra}
-                </span>
+                </button>
               )}
             </div>
+            <button
+              type="button"
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setMemberDialogOpen(true)}
+              aria-label={`Show all ${roster.length} project members`}
+            >
+              {roster.length} {roster.length === 1 ? "member" : "members"}
+            </button>
+            <Dialog open={memberDialogOpen} onOpenChange={setMemberDialogOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Project members</DialogTitle>
+                  <DialogDescription>
+                    Choose a member to open their profile.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-2 gap-2 py-2 sm:grid-cols-3">
+                  {roster.map((member) => (
+                    <Link
+                      key={member.id}
+                      href={`/profile?user=${member.id}`}
+                      className="flex min-w-0 items-center gap-2 rounded-lg border p-2 text-left transition-colors hover:bg-muted"
+                      onClick={() => setMemberDialogOpen(false)}
+                    >
+                      <Avatar className="size-8 shrink-0">
+                        <AvatarImage
+                          src={
+                            member.avatar || "/avatars/default-young-man.png"
+                          }
+                          alt={member.name}
+                        />
+                        <AvatarFallback className="text-[10px]">
+                          {initials(member.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">
+                          {member.name}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {member.role}
+                        </span>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </DialogContent>
+            </Dialog>
             <Button
               variant="outline"
               size="icon"
@@ -1030,16 +1934,27 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
                 if (!backendProjectId) return;
                 const next = !starred;
                 try {
-                  const response = await fetch(`/api/projects/${backendProjectId}/favorite`, {
-                    method: next ? "POST" : "DELETE",
-                  });
-                  if (!response.ok) throw new Error("Could not update starred projects.");
+                  const response = await fetch(
+                    `/api/projects/${backendProjectId}/favorite`,
+                    {
+                      method: next ? "POST" : "DELETE",
+                    },
+                  );
+                  if (!response.ok)
+                    throw new Error("Could not update starred projects.");
                   setStarred(next);
-                  toast.success(next ? "Added to starred" : "Removed from starred", {
-                    description: project.name,
-                  });
+                  toast.success(
+                    next ? "Added to starred" : "Removed from starred",
+                    {
+                      description: project.name,
+                    },
+                  );
                 } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Could not update starred projects.");
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not update starred projects.",
+                  );
                 }
               }}
               aria-pressed={starred}
@@ -1053,30 +1968,32 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
                 {starred ? "Unstar project" : "Star project"}
               </span>
             </Button>
+            {canManageMembers && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-9"
+                onClick={() => setProjectSettingsOpen(true)}
+              >
+                <IconSettings className="size-4" />
+                <span className="sr-only">Edit project</span>
+              </Button>
+            )}
+            {(isProjectMember || isSystemAdmin) && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setTimeTask(null);
+                  setTimeLogOpen(true);
+                }}
+              >
+                Log time
+              </Button>
+            )}
             <Button
-              variant="outline"
-              onClick={() =>
-                toast.success("Share link copied", {
-                  description: `${project.key} is ready to share with your team.`,
-                })
-              }
+              onClick={() => openAddTask("Todo")}
+              disabled={!membersLoaded}
             >
-              <IconShare3 className="size-4" /> Share
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-9"
-              onClick={() =>
-                toast("Project settings", {
-                  description: `Configure ${project.name}.`,
-                })
-              }
-            >
-              <IconSettings className="size-4" />
-              <span className="sr-only">Project settings</span>
-            </Button>
-            <Button onClick={() => openAddTask("Todo")} disabled={!membersLoaded}>
               <IconPlus className="size-4" /> New task
             </Button>
           </div>
@@ -1085,7 +2002,9 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
         {/* Progress strip */}
         <div className="flex items-center gap-4 rounded-xl border bg-card px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <span className="tabular-nums">{projectWithProgress.progress}%</span>
+            <span className="tabular-nums">
+              {projectWithProgress.progress}%
+            </span>
             <span className="text-muted-foreground">complete</span>
           </div>
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
@@ -1094,13 +2013,18 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
               style={{ width: `${projectWithProgress.progress}%` }}
             />
           </div>
-          <span className={`hidden size-2.5 rounded-full sm:block ${STATUS_DOT[project.status]}`} />
-          <span className="hidden text-sm text-muted-foreground sm:block">{project.status}</span>
+          <span
+            className={`hidden size-2.5 rounded-full sm:block ${STATUS_DOT[project.status]}`}
+          />
+          <span className="hidden text-sm text-muted-foreground sm:block">
+            {project.status}
+          </span>
         </div>
       </div>
 
       <ProjectWorkspace
         project={projectWithProgress}
+        totalTimeMinutes={totalTimeMinutes}
         initialTab={initialWorkspaceTab}
         tasks={tasks}
         members={roster}
@@ -1110,14 +2034,14 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
         canReviewProgress={canReviewProgress}
         onProgressChange={updateTaskProgress}
         onTaskDetailsChange={updateTaskDetails}
-          onReviewProgress={reviewTaskProgress}
-          onAddTask={(status) => openAddTask(status, true)}
-          canManageMembers={canManageMembers}
-          memberCandidates={memberCandidates}
-          onAddMember={addProjectMember}
-          onRemoveMember={removeProjectMember}
-          onUpdateMemberRole={updateProjectMemberRole}
-        />
+        onReviewProgress={reviewTaskProgress}
+        onAddTask={(status) => openAddTask(status, true)}
+        canManageMembers={canManageMembers}
+        memberCandidates={memberCandidates}
+        onAddMember={addProjectMember}
+        onRemoveMember={removeProjectMember}
+        onUpdateMemberRole={updateProjectMemberRole}
+      />
 
       <AddTaskDialog
         open={addOpen}
@@ -1126,6 +2050,36 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
         statusLocked={addStatusLocked}
         roster={roster}
         onCreate={createTask}
+      />
+
+      <ProjectSettingsDialog
+        project={project}
+        open={projectSettingsOpen}
+        onOpenChange={setProjectSettingsOpen}
+        onSave={updateProjectSettings}
+      />
+      <TimeLogDialog
+        tasks={tasks}
+        selectedTask={timeTask}
+        members={roster}
+        currentUserId={String(user?.id ?? "")}
+        canChooseUser={canSubmitProgress}
+        open={timeLogOpen}
+        onOpenChange={setTimeLogOpen}
+        onLogged={(durationMinutes, loggedTaskId) => {
+          setTotalTimeMinutes((current) => current + durationMinutes);
+          setTasks((current) =>
+            current.map((task) =>
+              task.backendId === loggedTaskId
+                ? {
+                    ...task,
+                    totalTimeMinutes:
+                      (task.totalTimeMinutes ?? 0) + durationMinutes,
+                  }
+                : task,
+            ),
+          );
+        }}
       />
 
       <EditTaskDialog
@@ -1146,7 +2100,10 @@ export function ProjectDetail({ project: seedProject, initialWorkspaceTab = "ove
             due: input.endDate,
             weight: input.weight,
           });
-          if (input.progress !== (task.reportedProgress ?? task.approvedProgress ?? 0)) {
+          if (
+            input.progress !==
+            (task.reportedProgress ?? task.approvedProgress ?? 0)
+          ) {
             await updateTaskProgress(task, input.progress);
           }
         }}

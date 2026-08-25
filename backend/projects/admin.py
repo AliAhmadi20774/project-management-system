@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Project, ProjectMembership, Task, TimeEntry
+from .models import Project, ProjectMembership, Task, TimeEntry, WorkLog
 
 
 class ProjectMembershipInline(admin.TabularInline):
@@ -25,6 +25,13 @@ class TaskAdmin(admin.ModelAdmin):
 
 @admin.register(TimeEntry)
 class TimeEntryAdmin(admin.ModelAdmin):
-    list_display = ('user', 'project', 'work_date', 'duration_minutes')
-    list_filter = ('project',)
-    search_fields = ('user__username', 'project__name')
+    list_display = ('user', 'task', 'work_date', 'duration_minutes')
+    list_filter = ('task__project',)
+    search_fields = ('user__username', 'task__title', 'task__project__name')
+
+
+@admin.register(WorkLog)
+class WorkLogAdmin(admin.ModelAdmin):
+    list_display = ('user', 'work_date', 'duration_minutes', 'notes')
+    list_filter = ('work_date',)
+    search_fields = ('user__username', 'notes')

@@ -1,8 +1,16 @@
+from django.db.models import Sum
 from rest_framework import serializers
-from django.utils import timezone
 
-from .models import Project, ProjectMembership, Task, TimeEntry
+from .models import CalendarEvent, Project, ProjectMembership, Task, TimeEntry, WorkLog
 from .permissions import can_manage_project_members
+from accounts.models import User
+
+
+class CalendarEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CalendarEvent
+        fields = ('id', 'title', 'event_date', 'event_time', 'color', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'created_at', 'updated_at')
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -11,6 +19,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     completed_task_count = serializers.SerializerMethodField()
     progress = serializers.SerializerMethodField()
     member_count = serializers.SerializerMethodField()
+    total_time_minutes = serializers.SerializerMethodField()
     can_manage_members = serializers.SerializerMethodField()
     is_starred = serializers.SerializerMethodField()
 
@@ -18,12 +27,12 @@ class ProjectSerializer(serializers.ModelSerializer):
         model = Project
         fields = (
             'id', 'name', 'code', 'category', 'description', 'status', 'start_date', 'end_date', 'created_by',
-            'created_by_name', 'task_count', 'completed_task_count', 'progress', 'member_count', 'can_manage_members', 'is_starred',
+            'created_by_name', 'task_count', 'completed_task_count', 'progress', 'member_count', 'total_time_minutes', 'can_manage_members', 'is_starred',
             'created_at', 'updated_at',
         )
         read_only_fields = (
             'id', 'created_by', 'created_by_name', 'task_count', 'completed_task_count',
-            'progress', 'member_count', 'can_manage_members', 'is_starred', 'created_at', 'updated_at',
+            'progress', 'member_count', 'total_time_minutes', 'can_manage_members', 'is_starred', 'created_at', 'updated_at',
         )
 
     @staticmethod
@@ -50,6 +59,18 @@ class ProjectSerializer(serializers.ModelSerializer):
     @staticmethod
     def get_member_count(project):
         return project.memberships.values('user_id').distinct().count()
+
+    @staticmethod
+    def get_total_time_minutes(project):
+        annotated_total = getattr(project, 'total_time_minutes', None)
+        if annotated_total is not None:
+            return annotated_total
+        return (
+            TimeEntry.objects.filter(task__project=project).aggregate(
+                total=Sum('duration_minutes')
+            )['total']
+            or 0
+        )
 
     def get_can_manage_members(self, project):
         request = self.context.get('request')
@@ -92,6 +113,7 @@ class TaskSerializer(serializers.ModelSerializer):
     assignee_avatar_url = serializers.SerializerMethodField()
     reported_by_name = serializers.SerializerMethodField()
     reviewed_by_name = serializers.SerializerMethodField()
+    total_time_minutes = serializers.SerializerMethodField()
     initial_progress = serializers.IntegerField(
         write_only=True, required=False, default=0, min_value=0, max_value=100
     )
@@ -101,12 +123,12 @@ class TaskSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'project', 'title', 'description', 'status', 'priority', 'start_date', 'end_date', 'assignee', 'assignee_name', 'assignee_avatar_url',
             'weight', 'initial_progress', 'reported_progress', 'approved_progress', 'progress_state', 'reported_by',
-            'reported_by_name', 'reviewed_by', 'reviewed_by_name', 'review_comment',
+            'reported_by_name', 'reviewed_by', 'reviewed_by_name', 'review_comment', 'total_time_minutes',
             'created_at', 'updated_at',
         )
         read_only_fields = (
             'id', 'assignee_name', 'assignee_avatar_url', 'reported_progress', 'approved_progress', 'progress_state', 'reported_by',
-            'reported_by_name', 'reviewed_by', 'reviewed_by_name', 'review_comment',
+            'reported_by_name', 'reviewed_by', 'reviewed_by_name', 'review_comment', 'total_time_minutes',
             'created_at', 'updated_at',
         )
 
@@ -128,6 +150,13 @@ class TaskSerializer(serializers.ModelSerializer):
 
     def get_reviewed_by_name(self, task):
         return self._name(task.reviewed_by)
+
+    @staticmethod
+    def get_total_time_minutes(task):
+        annotated_total = getattr(task, 'total_time_minutes', None)
+        if annotated_total is not None:
+            return annotated_total
+        return task.time_entries.aggregate(total=Sum('duration_minutes'))['total'] or 0
 
     def validate(self, attrs):
         start_date = attrs.get('start_date', self.instance.start_date if self.instance else None)
@@ -170,24 +199,32 @@ class ProgressReviewSerializer(serializers.Serializer):
 
 class TimeEntrySerializer(serializers.ModelSerializer):
     user_name = serializers.SerializerMethodField()
+    recorded_by_name = serializers.SerializerMethodField()
+    task_name = serializers.CharField(source='task.title', read_only=True)
+    project = serializers.IntegerField(source='task.project_id', read_only=True)
+    project_name = serializers.CharField(source='task.project.name', read_only=True)
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(is_active=True), required=False)
 
     class Meta:
         model = TimeEntry
-        fields = ('id', 'project', 'user', 'user_name', 'work_date', 'duration_minutes', 'created_at', 'updated_at')
-        read_only_fields = ('id', 'user', 'user_name', 'created_at', 'updated_at')
+        fields = ('id', 'task', 'task_name', 'project', 'project_name', 'user', 'user_name', 'recorded_by', 'recorded_by_name', 'work_date', 'duration_minutes', 'notes', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'user_name', 'recorded_by', 'recorded_by_name', 'created_at', 'updated_at')
 
     def get_user_name(self, entry):
         return entry.user.get_full_name() or entry.user.username
 
-    def validate(self, attrs):
-        request = self.context['request']
-        project = attrs.get('project', self.instance.project if self.instance else None)
-        work_date = attrs.get('work_date', self.instance.work_date if self.instance else timezone.localdate())
-        queryset = TimeEntry.objects.filter(project=project, user=request.user, work_date=work_date)
-        if self.instance:
-            queryset = queryset.exclude(pk=self.instance.pk)
-        if queryset.exists():
-            raise serializers.ValidationError({
-                'work_date': 'A daily time entry already exists for this project.',
-            })
-        return attrs
+    def get_recorded_by_name(self, entry):
+        return (entry.recorded_by.get_full_name() or entry.recorded_by.username) if entry.recorded_by else None
+
+
+class WorkLogSerializer(serializers.ModelSerializer):
+    user_name = serializers.SerializerMethodField()
+    project_name = serializers.CharField(source='project.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = WorkLog
+        fields = ('id', 'user', 'user_name', 'project', 'project_name', 'work_date', 'duration_minutes', 'notes', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'user', 'user_name', 'created_at', 'updated_at')
+
+    def get_user_name(self, entry):
+        return entry.user.get_full_name() or entry.user.username

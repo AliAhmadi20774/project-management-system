@@ -48,4 +48,21 @@ def can_review_progress(user, project):
 
 
 def can_log_time(user, project):
-    return has_project_role(user, project, ProjectMembership.Role.MEMBER)
+    """Every project participant may log their own daily time."""
+    return has_project_role(
+        user,
+        project,
+        ProjectMembership.Role.LEAD,
+        ProjectMembership.Role.OBSERVER,
+        ProjectMembership.Role.MEMBER,
+    )
+
+
+def can_log_time_for(user, project, target_user):
+    """Leads may record time for their own project members; admins for anyone."""
+    if is_system_admin(user):
+        return True
+    return (
+        has_project_role(user, project, ProjectMembership.Role.LEAD)
+        and has_project_role(target_user, project, ProjectMembership.Role.LEAD, ProjectMembership.Role.OBSERVER, ProjectMembership.Role.MEMBER)
+    )

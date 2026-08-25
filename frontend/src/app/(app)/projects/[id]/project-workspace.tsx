@@ -187,6 +187,14 @@ function shortDate(iso: string) {
   });
 }
 
+function formatLoggedTime(totalMinutes: number) {
+  const minutes = Math.max(0, Math.round(totalMinutes));
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours === 0) return `${remainingMinutes}m`;
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
 function ganttProgressColor(progress: number) {
   const clamped = Math.min(100, Math.max(0, progress));
   return `color-mix(in oklch, var(--timeline-progress-start) ${100 - clamped}%, var(--timeline-progress-end) ${clamped}%)`;
@@ -244,15 +252,34 @@ const TASK_POOL = [
   "Wire webhooks retry queue",
 ];
 
-const LABELS = ["frontend", "backend", "design", "bug", "feature", "infra", "docs", "research"];
+const LABELS = [
+  "frontend",
+  "backend",
+  "design",
+  "bug",
+  "feature",
+  "infra",
+  "docs",
+  "research",
+];
 const PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Urgent"];
 // Fill plan so the board and gantt are full but realistic.
 const STATUS_PLAN: TaskStatus[] = [
-  "Backlog", "Backlog", "Backlog",
-  "Todo", "Todo", "Todo",
-  "In Progress", "In Progress", "In Progress",
-  "In Review", "In Review",
-  "Done", "Done", "Done", "Done",
+  "Backlog",
+  "Backlog",
+  "Backlog",
+  "Todo",
+  "Todo",
+  "Todo",
+  "In Progress",
+  "In Progress",
+  "In Progress",
+  "In Review",
+  "In Review",
+  "Done",
+  "Done",
+  "Done",
+  "Done",
 ];
 
 export function buildTasks(project: Project): Task[] {
@@ -266,7 +293,10 @@ export function buildTasks(project: Project): Task[] {
     const dueMs = addDays(startMs, duration);
     const total = (i % 4) + 1;
     const labels = Array.from(
-      new Set([LABELS[(seed + i) % LABELS.length], LABELS[(seed + i * 3 + 1) % LABELS.length]])
+      new Set([
+        LABELS[(seed + i) % LABELS.length],
+        LABELS[(seed + i * 3 + 1) % LABELS.length],
+      ]),
     );
     return {
       id: `${project.key}-${210 + i}`,
@@ -361,6 +391,7 @@ function TaskLabels({ labels }: { labels: string[] }) {
 // ---------------------------------------------------------------------------
 
 export type TaskActions = {
+  onLogTime?: (task: Task) => void;
   onOpen: (task: Task) => void;
   onDuplicate: (task: Task) => Promise<void>;
   onDelete: (task: Task) => void;
@@ -388,14 +419,25 @@ function TaskMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
+        {actions.onLogTime && (
+          <DropdownMenuItem onSelect={() => actions.onLogTime?.(task)}>
+            <IconClock className="size-4" /> Log time
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={() => actions.onOpen(task)}>
           <IconExternalLink className="size-4" /> Edit task
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => {
-          void actions.onDuplicate(task).catch((error) => {
-            toast.error(error instanceof Error ? error.message : "Could not duplicate task.");
-          });
-        }}>
+        <DropdownMenuItem
+          onSelect={() => {
+            void actions.onDuplicate(task).catch((error) => {
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : "Could not duplicate task.",
+              );
+            });
+          }}
+        >
           <IconCopy className="size-4" /> Duplicate
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -421,16 +463,20 @@ function BoardCard({
 }) {
   const prio = PRIORITY_META[task.priority];
   const isPendingReview = task.progressState === "pending_review";
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: task.id,
-    disabled: !canManageTasks,
-  });
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: task.id,
+      disabled: !canManageTasks,
+    });
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      style={{ transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.35 : 1 }}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.35 : 1,
+      }}
       className={`group/card space-y-2.5 rounded-lg border bg-card p-3 shadow-sm transition-[transform,opacity,border-color] hover:border-foreground/20 ${canManageTasks ? "cursor-grab touch-none active:cursor-grabbing" : ""}`}
     >
       <div className="flex items-center justify-between">
@@ -449,6 +495,16 @@ function BoardCard({
               {task.weight ?? 0}% weight
             </span>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => actions.onLogTime?.(task)}
+            aria-label={`Log time for ${task.title}`}
+          >
+            <IconClock className="size-3.5" />
+          </Button>
           <TaskMenu task={task} actions={actions} />
         </div>
       </div>
@@ -478,6 +534,15 @@ function BoardCard({
           </AvatarFallback>
         </Avatar>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          {task.totalTimeMinutes ? (
+            <span
+              className="flex items-center gap-1 tabular-nums"
+              title="Time logged"
+            >
+              <IconClock className="size-3.5" />
+              {formatLoggedTime(task.totalTimeMinutes)}
+            </span>
+          ) : null}
           <span className="flex items-center gap-1">
             <IconSubtask className="size-3.5" />
             <span className="tabular-nums">
@@ -509,7 +574,10 @@ function BoardColumn({
   canManageTasks: boolean;
   onAddTask: (status: TaskStatus) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: column.status, disabled: !canManageTasks });
+  const { setNodeRef, isOver } = useDroppable({
+    id: column.status,
+    disabled: !canManageTasks,
+  });
 
   return (
     <div
@@ -517,37 +585,115 @@ function BoardColumn({
       className={`flex min-w-0 flex-col gap-3 rounded-xl bg-muted/40 p-3 transition-all ${isOver ? "scale-[1.01] bg-primary/10 ring-2 ring-primary/50" : ""}`}
     >
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2"><span className={`size-2 rounded-full ${column.dot}`} /><span className="text-sm font-medium">{column.status}</span><span className="rounded bg-background px-1.5 text-xs font-medium tabular-nums text-muted-foreground">{tasks.length}</span></div>
+        <div className="flex items-center gap-2">
+          <span className={`size-2 rounded-full ${column.dot}`} />
+          <span className="text-sm font-medium">{column.status}</span>
+          <span className="rounded bg-background px-1.5 text-xs font-medium tabular-nums text-muted-foreground">
+            {tasks.length}
+          </span>
+        </div>
         <div className="flex items-center gap-0.5">
-          {canManageTasks && <Button variant="ghost" size="icon" className="size-6" onClick={() => onAddTask(column.status)} aria-label={`Add task to ${column.status}`}><IconPlus className="size-4" /></Button>}
-          <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-6" aria-label={`${column.status} column options`}><IconDots className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-44">
-            {canManageTasks && <DropdownMenuItem onSelect={() => onAddTask(column.status)}><IconPlus className="size-4" /> Add task</DropdownMenuItem>}
-            <DropdownMenuItem onSelect={() => toast.success("Column sorted", { description: `${column.status} sorted by priority.` })}><IconArrowsSort className="size-4" /> Sort by priority</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => toast(`${column.status} collapsed`, { description: `${tasks.length} tasks hidden.` })}><IconEyeOff className="size-4" /> Collapse column</DropdownMenuItem>
-          </DropdownMenuContent></DropdownMenu>
+          {canManageTasks && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              onClick={() => onAddTask(column.status)}
+              aria-label={`Add task to ${column.status}`}
+            >
+              <IconPlus className="size-4" />
+            </Button>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                aria-label={`${column.status} column options`}
+              >
+                <IconDots className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              {canManageTasks && (
+                <DropdownMenuItem onSelect={() => onAddTask(column.status)}>
+                  <IconPlus className="size-4" /> Add task
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onSelect={() =>
+                  toast.success("Column sorted", {
+                    description: `${column.status} sorted by priority.`,
+                  })
+                }
+              >
+                <IconArrowsSort className="size-4" /> Sort by priority
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  toast(`${column.status} collapsed`, {
+                    description: `${tasks.length} tasks hidden.`,
+                  })
+                }
+              >
+                <IconEyeOff className="size-4" /> Collapse column
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       <div className="flex flex-col gap-2">
-        {tasks.map((task) => <BoardCard key={task.id} task={task} actions={actions} canManageTasks={canManageTasks} />)}
-        {isOver && <div className="rounded-lg border border-dashed border-primary/60 bg-primary/5 px-3 py-4 text-center text-xs font-medium text-primary">Drop to move to {column.status}</div>}
+        {tasks.map((task) => (
+          <BoardCard
+            key={task.id}
+            task={task}
+            actions={actions}
+            canManageTasks={canManageTasks}
+          />
+        ))}
+        {isOver && (
+          <div className="rounded-lg border border-dashed border-primary/60 bg-primary/5 px-3 py-4 text-center text-xs font-medium text-primary">
+            Drop to move to {column.status}
+          </div>
+        )}
       </div>
-      {canManageTasks && <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => onAddTask(column.status)}><IconPlus className="size-4" /> Add task</Button>}
+      {canManageTasks && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="justify-start text-muted-foreground"
+          onClick={() => onAddTask(column.status)}
+        >
+          <IconPlus className="size-4" /> Add task
+        </Button>
+      )}
     </div>
   );
 }
 
-function BoardView({ tasks, actions, onAddTask, canManageTasks, onStatusChange }: {
+function BoardView({
+  tasks,
+  actions,
+  onAddTask,
+  canManageTasks,
+  onStatusChange,
+}: {
   tasks: Task[];
   actions: TaskActions;
   onAddTask: (status: TaskStatus) => void;
   canManageTasks: boolean;
   onStatusChange: (task: Task, status: TaskStatus) => Promise<void>;
 }) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   function handleDragStart(event: DragStartEvent) {
-    setActiveTask(tasks.find((task) => task.id === String(event.active.id)) ?? null);
+    setActiveTask(
+      tasks.find((task) => task.id === String(event.active.id)) ?? null,
+    );
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -555,17 +701,51 @@ function BoardView({ tasks, actions, onAddTask, canManageTasks, onStatusChange }
     setActiveTask(null);
     if (!task || !event.over) return;
     const destination = String(event.over.id) as TaskStatus;
-    if (destination === task.status || !BOARD_COLUMNS.some((column) => column.status === destination)) return;
-    void onStatusChange(task, destination).catch((error) => toast.error(error instanceof Error ? error.message : "Could not update task status."));
+    if (
+      destination === task.status ||
+      !BOARD_COLUMNS.some((column) => column.status === destination)
+    )
+      return;
+    void onStatusChange(task, destination).catch((error) =>
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not update task status.",
+      ),
+    );
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragCancel={() => setActiveTask(null)} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragCancel={() => setActiveTask(null)}
+      onDragEnd={handleDragEnd}
+    >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-        {BOARD_COLUMNS.map((column) => <BoardColumn key={column.status} column={column} tasks={tasks.filter((task) => task.status === column.status)} actions={actions} canManageTasks={canManageTasks} onAddTask={onAddTask} />)}
+        {BOARD_COLUMNS.map((column) => (
+          <BoardColumn
+            key={column.status}
+            column={column}
+            tasks={tasks.filter((task) => task.status === column.status)}
+            actions={actions}
+            canManageTasks={canManageTasks}
+            onAddTask={onAddTask}
+          />
+        ))}
       </div>
-      <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" }}>
-        {activeTask && <div className="w-72 rounded-lg border bg-card p-3 shadow-2xl"><p className="font-mono text-[11px] text-muted-foreground">{activeTask.id}</p><p className="mt-1 text-sm font-medium">{activeTask.title}</p></div>}
+      <DragOverlay
+        dropAnimation={{ duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" }}
+      >
+        {activeTask && (
+          <div className="w-72 rounded-lg border bg-card p-3 shadow-2xl">
+            <p className="font-mono text-[11px] text-muted-foreground">
+              {activeTask.id}
+            </p>
+            <p className="mt-1 text-sm font-medium">{activeTask.title}</p>
+          </div>
+        )}
       </DragOverlay>
     </DndContext>
   );
@@ -575,13 +755,7 @@ function BoardView({ tasks, actions, onAddTask, canManageTasks, onStatusChange }
 // List
 // ---------------------------------------------------------------------------
 
-function ListView({
-  tasks,
-  actions,
-}: {
-  tasks: Task[];
-  actions: TaskActions;
-}) {
+function ListView({ tasks, actions }: { tasks: Task[]; actions: TaskActions }) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const allChecked = checked.size === tasks.length && tasks.length > 0;
 
@@ -615,6 +789,7 @@ function ListView({
               <TableHead>Assignee</TableHead>
               <TableHead>Due</TableHead>
               <TableHead>Progress</TableHead>
+              <TableHead className="text-right">Time</TableHead>
               <TableHead className="text-right">Weight</TableHead>
               <TableHead className="w-10 pr-4" />
             </TableRow>
@@ -680,7 +855,10 @@ function ListView({
                 <TableCell>
                   <div className="space-y-1">
                     <div className="flex w-32 items-center gap-2">
-                      <Progress value={t.approvedProgress ?? 0} className="h-1.5" />
+                      <Progress
+                        value={t.approvedProgress ?? 0}
+                        className="h-1.5"
+                      />
                       <span className="w-9 text-right text-xs font-medium tabular-nums">
                         {t.approvedProgress ?? 0}%
                       </span>
@@ -691,6 +869,11 @@ function ListView({
                       </span>
                     )}
                   </div>
+                </TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground tabular-nums">
+                  {t.totalTimeMinutes
+                    ? formatLoggedTime(t.totalTimeMinutes)
+                    : "—"}
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">
                   {t.weight ?? 0}%
@@ -735,7 +918,15 @@ function EditableGanttBar({
   onChange: (task: Task, progress: number) => Promise<void>;
   onTaskDetailsChange: (
     task: Task,
-    input: { title: string; status: TaskStatus; priority: TaskPriority; assigneeId: string; start: string; due: string; weight: number }
+    input: {
+      title: string;
+      status: TaskStatus;
+      priority: TaskPriority;
+      assigneeId: string;
+      start: string;
+      due: string;
+      weight: number;
+    },
   ) => Promise<void>;
   onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
 }) {
@@ -747,9 +938,11 @@ function EditableGanttBar({
   const [saving, setSaving] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
   const [draftStatus, setDraftStatus] = useState<TaskStatus>(task.status);
-  const [draftPriority, setDraftPriority] = useState<TaskPriority>(task.priority);
+  const [draftPriority, setDraftPriority] = useState<TaskPriority>(
+    task.priority,
+  );
   const [draftAssignee, setDraftAssignee] = useState(
-    task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id
+    task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id,
   );
   const [draftStart, setDraftStart] = useState(task.start);
   const [draftDue, setDraftDue] = useState(task.due);
@@ -759,7 +952,10 @@ function EditableGanttBar({
     draftTitle.trim() !== task.title ||
     draftStatus !== task.status ||
     draftPriority !== task.priority ||
-    draftAssignee !== (task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id) ||
+    draftAssignee !==
+      (task.assignee.id.startsWith("unassigned")
+        ? "unassigned"
+        : task.assignee.id) ||
     draftStart !== task.start ||
     draftDue !== task.due ||
     draftWeight !== (task.weight ?? 1);
@@ -770,7 +966,11 @@ function EditableGanttBar({
     setDraftTitle(task.title);
     setDraftStatus(task.status);
     setDraftPriority(task.priority);
-    setDraftAssignee(task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id);
+    setDraftAssignee(
+      task.assignee.id.startsWith("unassigned")
+        ? "unassigned"
+        : task.assignee.id,
+    );
     setDraftStart(task.start);
     setDraftDue(task.due);
     setDraftWeight(task.weight ?? 1);
@@ -779,12 +979,21 @@ function EditableGanttBar({
   function progressFromPointer(event: PointerEvent<HTMLElement>) {
     const rect = trackRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0) return draft;
-    return Math.max(0, Math.min(100, Math.round(((event.clientX - rect.left) / rect.width) * 100)));
+    return Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(((event.clientX - rect.left) / rect.width) * 100),
+      ),
+    );
   }
 
   async function saveQuickEdit() {
     const nextProgress = Number(inputValue);
-    if (canSubmitProgress && (!Number.isFinite(nextProgress) || nextProgress < 0 || nextProgress > 100)) {
+    if (
+      canSubmitProgress &&
+      (!Number.isFinite(nextProgress) || nextProgress < 0 || nextProgress > 100)
+    ) {
       toast.error("Progress must be between 0 and 100.");
       return;
     }
@@ -796,7 +1005,10 @@ function EditableGanttBar({
       toast.error("End date must be on or after start date.");
       return;
     }
-    if (canSubmitProgress && (!Number.isInteger(draftWeight) || draftWeight < 1 || draftWeight > 100)) {
+    if (
+      canSubmitProgress &&
+      (!Number.isInteger(draftWeight) || draftWeight < 1 || draftWeight > 100)
+    ) {
       toast.error("Weight must be a whole number between 1 and 100.");
       return;
     }
@@ -821,7 +1033,9 @@ function EditableGanttBar({
       }
       setOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update task.");
+      toast.error(
+        error instanceof Error ? error.message : "Could not update task.",
+      );
     } finally {
       setSaving(false);
     }
@@ -833,7 +1047,9 @@ function EditableGanttBar({
       await onReviewProgress(task, approved);
       setOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not review progress.");
+      toast.error(
+        error instanceof Error ? error.message : "Could not review progress.",
+      );
     } finally {
       setSaving(false);
     }
@@ -877,7 +1093,10 @@ function EditableGanttBar({
           <div className="h-full overflow-hidden rounded-md bg-slate-200/80 ring-1 ring-inset ring-slate-300/70 dark:bg-muted dark:ring-border/50">
             <div
               className="h-full transition-[width,background-color]"
-              style={{ width: `${draft}%`, backgroundColor: ganttProgressColor(draft) }}
+              style={{
+                width: `${draft}%`,
+                backgroundColor: ganttProgressColor(draft),
+              }}
             />
           </div>
           <span
@@ -885,7 +1104,8 @@ function EditableGanttBar({
             aria-label={task.status}
             title={task.status}
           />
-          {canSubmitProgress && <button
+          {canSubmitProgress && (
+            <button
               type="button"
               className={`absolute top-1/2 z-10 h-8 w-4 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize bg-transparent after:absolute after:inset-y-1 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:bg-foreground after:shadow-sm after:ring-1 after:ring-background transition-opacity focus-visible:opacity-100 focus-visible:outline-none ${dragging ? "opacity-100" : "opacity-55 group-hover/progress:opacity-100"}`}
               style={{ left: `${draft}%` }}
@@ -913,7 +1133,8 @@ function EditableGanttBar({
                 setDragging(false);
                 setDraft(progress);
               }}
-          />}
+            />
+          )}
           {dragging && (
             <span
               className="pointer-events-none absolute -top-7 z-20 -translate-x-1/2 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-medium text-background shadow"
@@ -948,23 +1169,45 @@ function EditableGanttBar({
               />
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Status</Label>
-                  <Select value={draftStatus} onValueChange={(value) => setDraftStatus(value as TaskStatus)}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <Label className="text-[10px] text-muted-foreground">
+                    Status
+                  </Label>
+                  <Select
+                    value={draftStatus}
+                    onValueChange={(value) =>
+                      setDraftStatus(value as TaskStatus)
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       {BOARD_COLUMNS.map((column) => (
-                        <SelectItem key={column.status} value={column.status}>{column.status}</SelectItem>
+                        <SelectItem key={column.status} value={column.status}>
+                          {column.status}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Priority</Label>
-                  <Select value={draftPriority} onValueChange={(value) => setDraftPriority(value as TaskPriority)}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <Label className="text-[10px] text-muted-foreground">
+                    Priority
+                  </Label>
+                  <Select
+                    value={draftPriority}
+                    onValueChange={(value) =>
+                      setDraftPriority(value as TaskPriority)
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       {Object.keys(PRIORITY_META).map((priority) => (
-                        <SelectItem key={priority} value={priority}>{priority}</SelectItem>
+                        <SelectItem key={priority} value={priority}>
+                          {priority}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -972,17 +1215,23 @@ function EditableGanttBar({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Select value={draftAssignee} onValueChange={setDraftAssignee}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Assignee" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Assignee" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned</SelectItem>
                     {members.map((member) => (
-                      <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                      <SelectItem key={member.id} value={member.id}>
+                        {member.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Weight</Label>
+                <Label className="text-[10px] text-muted-foreground">
+                  Weight
+                </Label>
                 <div className="flex items-center gap-1">
                   <Input
                     type="number"
@@ -990,7 +1239,9 @@ function EditableGanttBar({
                     max={100}
                     step={1}
                     value={draftWeight}
-                    onChange={(event) => setDraftWeight(Number(event.target.value))}
+                    onChange={(event) =>
+                      setDraftWeight(Number(event.target.value))
+                    }
                     className="h-8 text-xs"
                   />
                   <span className="text-[10px] text-muted-foreground">%</span>
@@ -998,12 +1249,26 @@ function EditableGanttBar({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Start</Label>
-                  <Input type="date" value={draftStart} onChange={(event) => setDraftStart(event.target.value)} className="h-8 text-xs" />
+                  <Label className="text-[10px] text-muted-foreground">
+                    Start
+                  </Label>
+                  <Input
+                    type="date"
+                    value={draftStart}
+                    onChange={(event) => setDraftStart(event.target.value)}
+                    className="h-8 text-xs"
+                  />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">End</Label>
-                  <Input type="date" value={draftDue} onChange={(event) => setDraftDue(event.target.value)} className="h-8 text-xs" />
+                  <Label className="text-[10px] text-muted-foreground">
+                    End
+                  </Label>
+                  <Input
+                    type="date"
+                    value={draftDue}
+                    onChange={(event) => setDraftDue(event.target.value)}
+                    className="h-8 text-xs"
+                  />
                 </div>
               </div>
             </>
@@ -1012,7 +1277,12 @@ function EditableGanttBar({
           {canSubmitProgress && (
             <div className="space-y-1.5 border-t pt-2.5">
               <div className="flex items-center justify-between">
-                <Label htmlFor={`progress-${task.id}`} className="text-[10px] text-muted-foreground">Progress</Label>
+                <Label
+                  htmlFor={`progress-${task.id}`}
+                  className="text-[10px] text-muted-foreground"
+                >
+                  Progress
+                </Label>
                 <div className="flex items-center gap-1">
                   <Input
                     id={`progress-${task.id}`}
@@ -1022,7 +1292,8 @@ function EditableGanttBar({
                     value={inputValue}
                     onChange={(event) => {
                       setInputValue(event.target.value);
-                      if (event.target.value) setDraft(Number(event.target.value));
+                      if (event.target.value)
+                        setDraft(Number(event.target.value));
                     }}
                     className="h-7 w-16 text-right text-xs"
                   />
@@ -1048,12 +1319,33 @@ function EditableGanttBar({
           {canReviewProgress && task.progressState === "pending_review" && (
             <div className="flex items-center justify-between rounded-md border bg-muted/40 p-2">
               <div>
-                <p className="text-[10px] text-muted-foreground">Reported progress</p>
-                <p className="text-xs font-semibold">{task.reportedProgress ?? 0}%</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Reported progress
+                </p>
+                <p className="text-xs font-semibold">
+                  {task.reportedProgress ?? 0}%
+                </p>
               </div>
               <div className="flex gap-1">
-                <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={saving} onClick={() => void reviewProgress(false)}>Reject</Button>
-                <Button type="button" size="sm" className="h-7 px-2 text-[11px]" disabled={saving} onClick={() => void reviewProgress(true)}>Approve</Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px]"
+                  disabled={saving}
+                  onClick={() => void reviewProgress(false)}
+                >
+                  Reject
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  disabled={saving}
+                  onClick={() => void reviewProgress(true)}
+                >
+                  Approve
+                </Button>
               </div>
             </div>
           )}
@@ -1072,7 +1364,16 @@ function EditableGanttBar({
             >
               Cancel
             </Button>
-            <Button type="submit" size="sm" className="flex-1" disabled={saving || (!detailsDirty && (!canSubmitProgress || Number(inputValue) === progress))}>
+            <Button
+              type="submit"
+              size="sm"
+              className="flex-1"
+              disabled={
+                saving ||
+                (!detailsDirty &&
+                  (!canSubmitProgress || Number(inputValue) === progress))
+              }
+            >
               {saving ? "Updating..." : "Update"}
             </Button>
           </div>
@@ -1100,7 +1401,15 @@ function GanttView({
   onProgressChange: (task: Task, progress: number) => Promise<void>;
   onTaskDetailsChange: (
     task: Task,
-    input: { title: string; status: TaskStatus; priority: TaskPriority; assigneeId: string; start: string; due: string; weight: number }
+    input: {
+      title: string;
+      status: TaskStatus;
+      priority: TaskPriority;
+      assigneeId: string;
+      start: string;
+      due: string;
+      weight: number;
+    },
   ) => Promise<void>;
   onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
 }) {
@@ -1118,8 +1427,10 @@ function GanttView({
 
   const rows = useMemo(
     () =>
-      [...tasks].sort((a, b) => isoToMs(a.start) - isoToMs(b.start)).slice(0, 14),
-    [tasks]
+      [...tasks]
+        .sort((a, b) => isoToMs(a.start) - isoToMs(b.start))
+        .slice(0, 14),
+    [tasks],
   );
 
   const weekLines: number[] = [];
@@ -1148,8 +1459,7 @@ function GanttView({
                   className="border-r px-3 py-2.5 text-xs font-medium last:border-r-0"
                   style={{ width: `${(m.days / 92) * 100}%` }}
                 >
-                  {m.label}{" "}
-                  <span className="text-muted-foreground">2026</span>
+                  {m.label} <span className="text-muted-foreground">2026</span>
                 </div>
               ))}
             </div>
@@ -1198,13 +1508,14 @@ function GanttView({
                     style={{ left: `${x}%` }}
                   />
                 ))}
-                {false && milestones.map((m) => (
-                  <div
-                    key={m.title}
-                    className="absolute inset-y-0 w-px border-l border-dashed border-muted-foreground/40"
-                    style={{ left: `${m.pct}%` }}
-                  />
-                ))}
+                {false &&
+                  milestones.map((m) => (
+                    <div
+                      key={m.title}
+                      className="absolute inset-y-0 w-px border-l border-dashed border-muted-foreground/40"
+                      style={{ left: `${m.pct}%` }}
+                    />
+                  ))}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
@@ -1227,8 +1538,8 @@ function GanttView({
               const width = Math.max(right - left, 2.5);
               const progress =
                 t.progressState === "pending_review"
-                  ? t.reportedProgress ?? t.approvedProgress ?? 0
-                  : t.approvedProgress ?? 0;
+                  ? (t.reportedProgress ?? t.approvedProgress ?? 0)
+                  : (t.approvedProgress ?? 0);
               return (
                 <div
                   key={t.id}
@@ -1238,6 +1549,9 @@ function GanttView({
                     <p className="truncate text-sm font-medium">{t.title}</p>
                     <p className="truncate text-[11px] text-muted-foreground">
                       {t.assignee.name}
+                      {t.totalTimeMinutes
+                        ? ` · ${formatLoggedTime(t.totalTimeMinutes)}`
+                        : ""}
                     </p>
                   </div>
                   <div className="relative h-11 flex-1">
@@ -1269,14 +1583,17 @@ function GanttView({
               <span
                 className="h-2 w-16 rounded-sm"
                 style={{
-                  background: "linear-gradient(to right, var(--timeline-progress-start), var(--timeline-progress-end))",
+                  background:
+                    "linear-gradient(to right, var(--timeline-progress-start), var(--timeline-progress-end))",
                 }}
               />
               Progress
             </span>
             {BOARD_COLUMNS.map((column) => (
               <span key={column.status} className="flex items-center gap-1.5">
-                <span className={`size-2 rounded-full ${TIMELINE_STATUS_DOT[column.status]}`} />
+                <span
+                  className={`size-2 rounded-full ${TIMELINE_STATUS_DOT[column.status]}`}
+                />
                 {column.status}
               </span>
             ))}
@@ -1317,21 +1634,31 @@ function MembersView({
   membersLoaded: boolean;
   canManageMembers: boolean;
   candidates: Array<{ id: string; name: string; email: string }>;
-  onAddMember: (userId: string, role: "lead" | "observer" | "member") => Promise<void>;
+  onAddMember: (
+    userId: string,
+    role: "lead" | "observer" | "member",
+  ) => Promise<void>;
   onRemoveMember: (member: TeamMember) => Promise<void>;
-  onUpdateMemberRole: (member: TeamMember, role: "lead" | "observer" | "member") => Promise<void>;
+  onUpdateMemberRole: (
+    member: TeamMember,
+    role: "lead" | "observer" | "member",
+  ) => Promise<void>;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [userPickerOpen, setUserPickerOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [selectedRole, setSelectedRole] = useState<"lead" | "observer" | "member">("member");
+  const [selectedRole, setSelectedRole] = useState<
+    "lead" | "observer" | "member"
+  >("member");
   const [pendingRemoval, setPendingRemoval] = useState<TeamMember | null>(null);
   const [pendingRoleChange, setPendingRoleChange] = useState<{
     member: TeamMember;
     role: "lead" | "observer" | "member";
   } | null>(null);
   const [saving, setSaving] = useState(false);
-  const selectedUser = candidates.find((candidate) => candidate.id === selectedUserId);
+  const selectedUser = candidates.find(
+    (candidate) => candidate.id === selectedUserId,
+  );
   const projectMembers = members;
   const roster = projectMembers.map((member) => ({
     member,
@@ -1365,10 +1692,17 @@ function MembersView({
     if (!pendingRoleChange) return;
     setSaving(true);
     try {
-      await onUpdateMemberRole(pendingRoleChange.member, pendingRoleChange.role);
+      await onUpdateMemberRole(
+        pendingRoleChange.member,
+        pendingRoleChange.role,
+      );
       setPendingRoleChange(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update the project role.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not update the project role.",
+      );
     } finally {
       setSaving(false);
     }
@@ -1378,10 +1712,16 @@ function MembersView({
     <>
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {membersLoaded ? `${projectMembers.length} project members` : "Loading project members…"}
+          {membersLoaded
+            ? `${projectMembers.length} project members`
+            : "Loading project members…"}
         </p>
         {canManageMembers && (
-          <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setAddOpen(true)}
+          >
             <IconUserPlus className="size-4" />
             Add member
           </Button>
@@ -1392,107 +1732,127 @@ function MembersView({
           No members have been added to this project yet.
         </div>
       ) : (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {roster.map(({ member, lead }) => {
-        const assigned = tasks.filter((t) => t.assignee.id === member.id);
-        const weight = assigned.reduce((sum, task) => sum + (task.weight ?? 0), 0);
-        return (
-          <Card key={member.id} className={lead ? "ring-1 ring-primary/30" : ""}>
-            <CardContent className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="relative">
-                  <Avatar className="size-11">
-                    <AvatarImage src={member.avatar} alt={member.name} />
-                    <AvatarFallback>{initials(member.name)}</AvatarFallback>
-                  </Avatar>
-                  <span
-                    className={`absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-2 ring-card ${STATUS_STATE[member.status]}`}
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate font-medium">{member.name}</p>
-                    {canManageMembers && member.membershipId ? (
-                      <Select
-                        value={member.role}
-                        onValueChange={(role) => {
-                          const nextRole = role as "lead" | "observer" | "member";
-                          if (nextRole !== member.role) setPendingRoleChange({ member, role: nextRole });
-                        }}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {roster.map(({ member, lead }) => {
+            const assigned = tasks.filter((t) => t.assignee.id === member.id);
+            const weight = assigned.reduce(
+              (sum, task) => sum + (task.weight ?? 0),
+              0,
+            );
+            return (
+              <Card
+                key={member.id}
+                className={lead ? "ring-1 ring-primary/30" : ""}
+              >
+                <CardContent className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="relative">
+                      <Avatar className="size-11">
+                        <AvatarImage src={member.avatar} alt={member.name} />
+                        <AvatarFallback>{initials(member.name)}</AvatarFallback>
+                      </Avatar>
+                      <span
+                        className={`absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-2 ring-card ${STATUS_STATE[member.status]}`}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-medium">{member.name}</p>
+                        {canManageMembers && member.membershipId ? (
+                          <Select
+                            value={member.role}
+                            onValueChange={(role) => {
+                              const nextRole = role as
+                                "lead" | "observer" | "member";
+                              if (nextRole !== member.role)
+                                setPendingRoleChange({
+                                  member,
+                                  role: nextRole,
+                                });
+                            }}
+                          >
+                            <SelectTrigger
+                              aria-label={`Change ${member.name}'s project role`}
+                              className="h-7 w-[118px] border-primary/20 bg-primary/10 px-2 text-xs text-primary"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="lead">Lead</SelectItem>
+                              <SelectItem value="observer">Observer</SelectItem>
+                              <SelectItem value="member">Member</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          member.role && (
+                            <Badge
+                              variant="secondary"
+                              className="bg-primary/10 text-primary"
+                            >
+                              {member.role === "lead"
+                                ? "Lead"
+                                : member.role === "observer"
+                                  ? "Observer"
+                                  : member.role === "member"
+                                    ? "Member"
+                                    : lead
+                                      ? "Lead"
+                                      : "Member"}
+                            </Badge>
+                          )
+                        )}
+                      </div>
+                    </div>
+                    {canManageMembers && member.membershipId && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setPendingRemoval(member)}
+                        aria-label={`Remove ${member.name} from project`}
                       >
-                        <SelectTrigger aria-label={`Change ${member.name}'s project role`} className="h-7 w-[118px] border-primary/20 bg-primary/10 px-2 text-xs text-primary">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="lead">Lead</SelectItem>
-                          <SelectItem value="observer">Observer</SelectItem>
-                          <SelectItem value="member">Member</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : member.role && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-primary/10 text-primary"
-                      >
-                        {member.role === "lead"
-                            ? "Lead"
-                            : member.role === "observer"
-                              ? "Observer"
-                              : member.role === "member"
-                                ? "Member"
-                                : lead
-                                  ? "Lead"
-                                  : "Member"}
-                      </Badge>
+                        <IconTrash className="size-4" />
+                      </Button>
                     )}
                   </div>
-                </div>
-                {canManageMembers && member.membershipId && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => setPendingRemoval(member)}
-                    aria-label={`Remove ${member.name} from project`}
-                  >
-                    <IconTrash className="size-4" />
-                  </Button>
-                )}
-              </div>
 
-              <div className="flex justify-end text-sm">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <span
-                    className={`size-2 rounded-full ${STATUS_STATE[member.status]}`}
-                  />
-                  {member.status}
-                </span>
-              </div>
+                  <div className="flex justify-end text-sm">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <span
+                        className={`size-2 rounded-full ${STATUS_STATE[member.status]}`}
+                      />
+                      {member.status}
+                    </span>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg bg-muted/50 px-3 py-2">
-                  <p className="text-lg font-semibold tabular-nums">
-                    {assigned.length}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Assigned</p>
-                </div>
-                <div className="rounded-lg bg-muted/50 px-3 py-2">
-                  <p className="text-lg font-semibold tabular-nums">{weight}%</p>
-                  <p className="text-xs text-muted-foreground">Weight</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-      </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg bg-muted/50 px-3 py-2">
+                      <p className="text-lg font-semibold tabular-nums">
+                        {assigned.length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Assigned</p>
+                    </div>
+                    <div className="rounded-lg bg-muted/50 px-3 py-2">
+                      <p className="text-lg font-semibold tabular-nums">
+                        {weight}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">Weight</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Add project member</DialogTitle>
-            <DialogDescription>Add an existing user to this project and choose their role.</DialogDescription>
+            <DialogDescription>
+              Add an existing user to this project and choose their role.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
@@ -1515,7 +1875,10 @@ function MembersView({
                     <IconArrowsSort className="size-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
                   <Command>
                     <CommandInput placeholder="Search by name or email…" />
                     <CommandList>
@@ -1531,9 +1894,13 @@ function MembersView({
                             }}
                           >
                             <div className="min-w-0">
-                              <p className="truncate text-sm">{candidate.name}</p>
+                              <p className="truncate text-sm">
+                                {candidate.name}
+                              </p>
                               {candidate.email && (
-                                <p className="truncate text-xs text-muted-foreground">{candidate.email}</p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {candidate.email}
+                                </p>
                               )}
                             </div>
                           </CommandItem>
@@ -1543,12 +1910,23 @@ function MembersView({
                   </Command>
                 </PopoverContent>
               </Popover>
-              {!candidates.length && <p className="text-xs text-muted-foreground">No other active users are available.</p>}
+              {!candidates.length && (
+                <p className="text-xs text-muted-foreground">
+                  No other active users are available.
+                </p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="project-member-role">Project role</Label>
-              <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as "lead" | "observer" | "member")}>
-                <SelectTrigger id="project-member-role"><SelectValue /></SelectTrigger>
+              <Select
+                value={selectedRole}
+                onValueChange={(value) =>
+                  setSelectedRole(value as "lead" | "observer" | "member")
+                }
+              >
+                <SelectTrigger id="project-member-role">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="lead">Lead</SelectItem>
                   <SelectItem value="observer">Observer</SelectItem>
@@ -1558,8 +1936,15 @@ function MembersView({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button disabled={!selectedUserId || saving} onClick={() => void addMember()}>Add member</Button>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!selectedUserId || saving}
+              onClick={() => void addMember()}
+            >
+              Add member
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1578,7 +1963,13 @@ function MembersView({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" disabled={saving} onClick={() => setPendingRoleChange(null)}>Cancel</Button>
+            <Button
+              variant="outline"
+              disabled={saving}
+              onClick={() => setPendingRoleChange(null)}
+            >
+              Cancel
+            </Button>
             <Button disabled={saving} onClick={() => void confirmRoleChange()}>
               {saving ? "Updating…" : "Confirm change"}
             </Button>
@@ -1616,7 +2007,11 @@ function buildActivity(_project: Project, _tasks: Task[]): ActivityEvent[] {
 
 function ActivityFeed({ events }: { events: ActivityEvent[] }) {
   if (events.length === 0) {
-    return <p className="py-4 text-sm text-muted-foreground">No activity has been recorded yet.</p>;
+    return (
+      <p className="py-4 text-sm text-muted-foreground">
+        No activity has been recorded yet.
+      </p>
+    );
   }
   return (
     <ol className="relative space-y-5 border-l pl-6">
@@ -1650,27 +2045,28 @@ function OverviewView({
   project,
   tasks,
   events,
+  totalTimeMinutes,
 }: {
   project: Project;
   tasks: Task[];
   events: ActivityEvent[];
+  totalTimeMinutes: number;
 }) {
   const doneTasks = tasks.filter((t) => t.status === "Done");
   const totalWeight = tasks.reduce((sum, task) => sum + (task.weight ?? 0), 0);
   const weightedProgressTotal = tasks.reduce(
-    (sum, task) => sum + ((task.weight ?? 0) * (task.approvedProgress ?? 0)) / 100,
-    0
+    (sum, task) =>
+      sum + ((task.weight ?? 0) * (task.approvedProgress ?? 0)) / 100,
+    0,
   );
   const weightedProgress = totalWeight
     ? (weightedProgressTotal / totalWeight) * 100
     : 0;
-  const teamSize = new Set([
-    project.lead.id,
-    ...project.members.map((m) => m.id),
-  ]).size;
-  const spentPct = project.budget ? Math.round((project.spent / project.budget) * 100) : 0;
+  const spentPct = project.budget
+    ? Math.round((project.spent / project.budget) * 100)
+    : 0;
   const durationDays = Math.round(
-    (isoToMs(project.due) - isoToMs(project.start)) / DAY
+    (isoToMs(project.due) - isoToMs(project.start)) / DAY,
   );
 
   const kpis = [
@@ -1693,10 +2089,10 @@ function OverviewView({
       hint: `${totalWeight}% task weight allocated`,
     },
     {
-      icon: IconUsers,
-      label: "Team",
-      value: String(teamSize),
-      hint: "Contributors",
+      icon: IconClock,
+      label: "Time logged",
+      value: formatLoggedTime(totalTimeMinutes),
+      hint: "Across task entries",
     },
   ];
 
@@ -1730,24 +2126,26 @@ function OverviewView({
             </div>
 
             {project.budget > 0 ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 font-medium">
-                  <IconWallet className="size-4 text-muted-foreground" />
-                  Budget spent
-                </span>
-                <span className="text-muted-foreground tabular-nums">
-                  {currency(project.spent)} of {currency(project.budget)} ·{" "}
-                  {spentPct}%
-                </span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 font-medium">
+                    <IconWallet className="size-4 text-muted-foreground" />
+                    Budget spent
+                  </span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {currency(project.spent)} of {currency(project.budget)} ·{" "}
+                    {spentPct}%
+                  </span>
+                </div>
+                <ProgressBar
+                  value={spentPct}
+                  tone={spentPct > 90 ? "foreground" : "muted"}
+                />
               </div>
-              <ProgressBar
-                value={spentPct}
-                tone={spentPct > 90 ? "foreground" : "muted"}
-              />
-            </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Budget tracking is not configured for this project.</p>
+              <p className="text-sm text-muted-foreground">
+                Budget tracking is not configured for this project.
+              </p>
             )}
 
             <div className="grid grid-cols-3 gap-3">
@@ -1781,31 +2179,33 @@ function OverviewView({
           </CardHeader>
           <CardContent>
             {project.milestones.length === 0 ? (
-              <p className="py-4 text-sm text-muted-foreground">No milestones have been added yet.</p>
+              <p className="py-4 text-sm text-muted-foreground">
+                No milestones have been added yet.
+              </p>
             ) : (
-            <ul className="space-y-4">
-              {project.milestones.map((m) => (
-                <li key={m.title} className="flex items-start gap-3">
-                  {m.done ? (
-                    <IconCircleCheckFilled className="mt-0.5 size-5 shrink-0 text-foreground" />
-                  ) : (
-                    <IconCircle className="mt-0.5 size-5 shrink-0 text-muted-foreground/50" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={`text-sm font-medium ${
-                        m.done ? "text-muted-foreground line-through" : ""
-                      }`}
-                    >
-                      {m.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground tabular-nums">
-                      {longDate(m.date)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+              <ul className="space-y-4">
+                {project.milestones.map((m) => (
+                  <li key={m.title} className="flex items-start gap-3">
+                    {m.done ? (
+                      <IconCircleCheckFilled className="mt-0.5 size-5 shrink-0 text-foreground" />
+                    ) : (
+                      <IconCircle className="mt-0.5 size-5 shrink-0 text-muted-foreground/50" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-sm font-medium ${
+                          m.done ? "text-muted-foreground line-through" : ""
+                        }`}
+                      >
+                        {m.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {longDate(m.date)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>
@@ -1828,7 +2228,10 @@ function OverviewView({
             <CardDescription>Lead and collaborators</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {[project.lead, ...project.members.filter((m) => m.id !== project.lead.id)]
+            {[
+              project.lead,
+              ...project.members.filter((m) => m.id !== project.lead.id),
+            ]
               .slice(0, 5)
               .map((m, i) => (
                 <div key={m.id} className="flex items-center gap-3">
@@ -1893,6 +2296,7 @@ const TABS = [
 
 export function ProjectWorkspace({
   project,
+  totalTimeMinutes,
   initialTab = "overview",
   tasks,
   members,
@@ -1902,34 +2306,50 @@ export function ProjectWorkspace({
   canReviewProgress,
   onProgressChange,
   onTaskDetailsChange,
-    onReviewProgress,
-    onAddTask,
-    canManageMembers,
-    memberCandidates,
-    onAddMember,
-    onRemoveMember,
-    onUpdateMemberRole,
+  onReviewProgress,
+  onAddTask,
+  canManageMembers,
+  memberCandidates,
+  onAddMember,
+  onRemoveMember,
+  onUpdateMemberRole,
 }: {
   project: Project;
-  initialTab?: "overview" | "members";
+  totalTimeMinutes: number;
+  initialTab?:
+    "overview" | "board" | "list" | "timeline" | "members" | "activity";
   tasks: Task[];
-    members: TeamMember[];
-    membersLoaded: boolean;
+  members: TeamMember[];
+  membersLoaded: boolean;
   actions: TaskActions;
   canSubmitProgress: boolean;
   canReviewProgress: boolean;
   onProgressChange: (task: Task, progress: number) => Promise<void>;
   onTaskDetailsChange: (
     task: Task,
-    input: { title: string; status: TaskStatus; priority: TaskPriority; assigneeId: string; start: string; due: string; weight: number }
+    input: {
+      title: string;
+      status: TaskStatus;
+      priority: TaskPriority;
+      assigneeId: string;
+      start: string;
+      due: string;
+      weight: number;
+    },
   ) => Promise<void>;
-    onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
-    onAddTask: (status: TaskStatus) => void;
-    canManageMembers: boolean;
-    memberCandidates: Array<{ id: string; name: string; email: string }>;
-    onAddMember: (userId: string, role: "lead" | "observer" | "member") => Promise<void>;
-    onRemoveMember: (member: TeamMember) => Promise<void>;
-    onUpdateMemberRole: (member: TeamMember, role: "lead" | "observer" | "member") => Promise<void>;
+  onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
+  onAddTask: (status: TaskStatus) => void;
+  canManageMembers: boolean;
+  memberCandidates: Array<{ id: string; name: string; email: string }>;
+  onAddMember: (
+    userId: string,
+    role: "lead" | "observer" | "member",
+  ) => Promise<void>;
+  onRemoveMember: (member: TeamMember) => Promise<void>;
+  onUpdateMemberRole: (
+    member: TeamMember,
+    role: "lead" | "observer" | "member",
+  ) => Promise<void>;
 }) {
   const events = useMemo(() => buildActivity(project, tasks), [project, tasks]);
 
@@ -1947,7 +2367,12 @@ export function ProjectWorkspace({
       </div>
 
       <TabsContent value="overview">
-        <OverviewView project={project} tasks={tasks} events={events} />
+        <OverviewView
+          project={project}
+          tasks={tasks}
+          events={events}
+          totalTimeMinutes={totalTimeMinutes}
+        />
       </TabsContent>
       <TabsContent value="board">
         <BoardView
@@ -1960,12 +2385,16 @@ export function ProjectWorkspace({
               title: task.title,
               status,
               priority: task.priority,
-              assigneeId: task.assignee.id.startsWith("unassigned") ? "unassigned" : task.assignee.id,
+              assigneeId: task.assignee.id.startsWith("unassigned")
+                ? "unassigned"
+                : task.assignee.id,
               start: task.start,
               due: task.due,
               weight: task.weight ?? 1,
             });
-            toast.success("Task status updated", { description: `${task.title} moved to ${status}.` });
+            toast.success("Task status updated", {
+              description: `${task.title} moved to ${status}.`,
+            });
           }}
         />
       </TabsContent>
@@ -1985,16 +2414,16 @@ export function ProjectWorkspace({
         />
       </TabsContent>
       <TabsContent value="members">
-          <MembersView
-            tasks={tasks}
-            members={members}
-            membersLoaded={membersLoaded}
-            canManageMembers={canManageMembers}
-            candidates={memberCandidates}
-            onAddMember={onAddMember}
-            onRemoveMember={onRemoveMember}
-            onUpdateMemberRole={onUpdateMemberRole}
-          />
+        <MembersView
+          tasks={tasks}
+          members={members}
+          membersLoaded={membersLoaded}
+          canManageMembers={canManageMembers}
+          candidates={memberCandidates}
+          onAddMember={onAddMember}
+          onRemoveMember={onRemoveMember}
+          onUpdateMemberRole={onUpdateMemberRole}
+        />
       </TabsContent>
       <TabsContent value="activity">
         <Card>

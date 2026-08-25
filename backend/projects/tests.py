@@ -4,7 +4,7 @@ from rest_framework.test import APITestCase
 
 from accounts.models import User
 
-from .models import Project, ProjectMembership, Task, TimeEntry
+from .models import CalendarEvent, Project, ProjectMembership, Task, TimeEntry
 from .permissions import PROJECT_MANAGER_GROUP
 
 
@@ -20,7 +20,7 @@ class ProjectRoleApiTests(APITestCase):
         self.manager.groups.add(group)
 
         self.client.force_authenticate(self.manager)
-        response = self.client.post('/api/v1/projects/', {'name': 'Website refresh'}, format='json')
+        response = self.client.post('/api/v1/projects/', {'name': 'Website refresh', 'code': 'WREF'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.project = Project.objects.get(pk=response.data['id'])
 
@@ -35,6 +35,30 @@ class ProjectRoleApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data[0]['id'], self.project.id)
+
+    def test_users_can_manage_only_their_own_calendar_events(self):
+        self.client.force_authenticate(self.member)
+        created = self.client.post(
+            '/api/v1/calendar-events/',
+            {'title': 'Sprint planning', 'event_date': '2026-08-25', 'event_time': '09:30', 'color': 'blue'},
+            format='json',
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created.data['event_time'], '09:30:00')
+
+        self.client.force_authenticate(self.viewer)
+        self.assertEqual(self.client.get('/api/v1/calendar-events/').data, [])
+        self.assertEqual(self.client.patch(f"/api/v1/calendar-events/{created.data['id']}/", {'title': 'Nope'}, format='json').status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_calendar_events_can_be_filtered_by_date_range(self):
+        CalendarEvent.objects.create(owner=self.member, title='August', event_date='2026-08-25')
+        CalendarEvent.objects.create(owner=self.member, title='September', event_date='2026-09-01')
+        self.client.force_authenticate(self.member)
+
+        response = self.client.get('/api/v1/calendar-events/?start=2026-08-01&end=2026-08-31')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([event['title'] for event in response.data], ['August'])
 
     def test_only_global_manager_or_admin_can_manage_members(self):
         task = Task.objects.create(project=self.project, title='Assigned work', assignee=self.lead)
@@ -221,31 +245,49 @@ class ProjectRoleApiTests(APITestCase):
         self.assertEqual(project.status_code, status.HTTP_200_OK)
         self.assertEqual(project.data['progress'], 65.0)
 
-    def test_member_can_log_one_daily_duration_but_observer_cannot(self):
+    def test_project_participants_can_log_multiple_entries_on_one_day(self):
+        task = Task.objects.create(project=self.project, title='Build the landing page', weight=10)
         self.client.force_authenticate(self.member)
         response = self.client.post(
             '/api/v1/time-entries/',
-            {'project': self.project.id, 'work_date': '2026-08-23', 'duration_minutes': 150},
+            {'task': task.id, 'work_date': '2026-08-23', 'duration_minutes': 150},
             format='json',
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         entry = TimeEntry.objects.get(pk=response.data['id'])
+        self.assertEqual(entry.task, task)
         self.assertEqual(entry.work_date.isoformat(), '2026-08-23')
         self.assertEqual(entry.duration_minutes, 150)
 
-        duplicate = self.client.post(
+        second_entry = self.client.post(
             '/api/v1/time-entries/',
-            {'project': self.project.id, 'work_date': '2026-08-23', 'duration_minutes': 60},
+            {'task': task.id, 'work_date': '2026-08-23', 'duration_minutes': 60},
             format='json',
         )
-        self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(second_entry.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            TimeEntry.objects.filter(
+                task=task,
+                user=self.member,
+                work_date='2026-08-23',
+            ).count(),
+            2,
+        )
 
         self.client.force_authenticate(self.observer)
-        forbidden = self.client.post(
+        observer_entry = self.client.post(
             '/api/v1/time-entries/',
-            {'project': self.project.id, 'work_date': '2026-08-23', 'duration_minutes': 60},
+            {'task': task.id, 'work_date': '2026-08-23', 'duration_minutes': 60},
             format='json',
         )
 
+        self.assertEqual(observer_entry.status_code, status.HTTP_201_CREATED)
+
+        self.client.force_authenticate(self.viewer)
+        forbidden = self.client.post(
+            '/api/v1/time-entries/',
+            {'task': task.id, 'work_date': '2026-08-23', 'duration_minutes': 30},
+            format='json',
+        )
         self.assertEqual(forbidden.status_code, status.HTTP_403_FORBIDDEN)

@@ -4,17 +4,49 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
-from django.db.models import Sum
+from django.db.models import IntegerField, Q, Sum, Value
+from django.db.models.functions import Coalesce
 
-from .models import Project, ProjectFavorite, ProjectMembership, Task, TimeEntry
-from .permissions import can_create_projects, can_log_time, can_manage_project, can_manage_project_members, can_manage_tasks, can_review_progress, can_submit_progress, is_system_admin
-from .serializers import ProgressReviewSerializer, ProgressSubmissionSerializer, ProjectMembershipSerializer, ProjectSerializer, TaskSerializer, TimeEntrySerializer
+from .models import CalendarEvent, Project, ProjectFavorite, ProjectMembership, Task, TimeEntry, WorkLog
+from .permissions import can_create_projects, can_log_time, can_log_time_for, can_manage_project, can_manage_project_members, can_manage_tasks, can_review_progress, can_submit_progress, is_system_admin
+from .serializers import CalendarEventSerializer, ProgressReviewSerializer, ProgressSubmissionSerializer, ProjectMembershipSerializer, ProjectSerializer, TaskSerializer, TimeEntrySerializer, WorkLogSerializer
+
+
+class CalendarEventViewSet(ModelViewSet):
+    serializer_class = CalendarEventSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        queryset = CalendarEvent.objects.filter(owner=self.request.user)
+        start = self.request.query_params.get('start')
+        end = self.request.query_params.get('end')
+        if start:
+            queryset = queryset.filter(event_date__gte=start)
+        if end:
+            queryset = queryset.filter(event_date__lte=end)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
 
 
 class ProjectViewSet(ModelViewSet):
-    queryset = Project.objects.select_related('created_by').all()
+    queryset = Project.objects.select_related('created_by').annotate(
+        total_time_minutes=Coalesce(
+            Sum('tasks__time_entries__duration_minutes'),
+            Value(0),
+            output_field=IntegerField(),
+        )
+    )
     serializer_class = ProjectSerializer
     permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.query_params.get('mine') == '1':
+            user = self.request.user
+            return queryset.filter(Q(created_by=user) | Q(memberships__user=user)).distinct()
+        return queryset
 
     def perform_create(self, serializer):
         if not can_create_projects(self.request.user):
@@ -96,12 +128,23 @@ class ProjectMembershipViewSet(ModelViewSet):
 
 
 class TaskViewSet(ModelViewSet):
-    queryset = Task.objects.select_related('project', 'assignee', 'reported_by', 'reviewed_by').all()
+    queryset = Task.objects.select_related(
+        'project', 'assignee', 'reported_by', 'reviewed_by'
+    ).annotate(
+        total_time_minutes=Coalesce(
+            Sum('time_entries__duration_minutes'),
+            Value(0),
+            output_field=IntegerField(),
+        )
+    )
     serializer_class = TaskSerializer
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        if self.request.query_params.get('mine') == '1':
+            user = self.request.user
+            queryset = queryset.filter(Q(project__created_by=user) | Q(project__memberships__user=user)).distinct()
         project_id = self.request.query_params.get('project')
         return queryset.filter(project_id=project_id) if project_id else queryset
 
@@ -189,33 +232,67 @@ class TaskViewSet(ModelViewSet):
 
 
 class TimeEntryViewSet(ModelViewSet):
-    queryset = TimeEntry.objects.select_related('project', 'user').all()
+    queryset = TimeEntry.objects.select_related('task__project', 'user', 'recorded_by').all()
     serializer_class = TimeEntrySerializer
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
-        user = self.request.user
-        if is_system_admin(user):
-            return self.queryset
-        return self.queryset.filter(user=user)
+        return self.queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        project = serializer.validated_data['project']
-        if not can_log_time(self.request.user, project):
-            raise PermissionDenied('Only project team members can log time.')
-        serializer.save(user=self.request.user)
+        task = serializer.validated_data['task']
+        project = task.project
+        target_user = serializer.validated_data.get('user', self.request.user)
+        if target_user != self.request.user and not can_log_time_for(self.request.user, project, target_user):
+            raise PermissionDenied('Only the project lead or system administrator can log time for another member.')
+        if target_user == self.request.user and not can_log_time(self.request.user, project):
+            raise PermissionDenied('Only project members can log their own time.')
+        serializer.save(user=target_user, recorded_by=self.request.user)
 
     def perform_update(self, serializer):
         entry = serializer.instance
-        if entry.user != self.request.user and not is_system_admin(self.request.user):
-            raise PermissionDenied('You can only update your own time entries.')
-        if not is_system_admin(self.request.user) and not can_log_time(self.request.user, entry.project):
-            raise PermissionDenied('Only project team members can update time entries.')
+        task = serializer.validated_data.get('task', entry.task)
+        project = task.project
+        target_user = serializer.validated_data.get('user', entry.user)
+        if target_user != entry.user and not can_log_time_for(self.request.user, project, target_user):
+            raise PermissionDenied('Only the project lead or system administrator can reassign this entry.')
+        if entry.user != self.request.user and not can_log_time_for(self.request.user, project, entry.user):
+            raise PermissionDenied('Only the project lead or system administrator can update this entry.')
+        if entry.user == self.request.user and not is_system_admin(self.request.user) and not can_log_time(self.request.user, project):
+            raise PermissionDenied('Only project members can update their own time entries.')
+        serializer.save(recorded_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        project = instance.task.project
+        if instance.user != self.request.user and not can_log_time_for(self.request.user, project, instance.user):
+            raise PermissionDenied('Only the project lead or system administrator can delete this entry.')
+        if instance.user == self.request.user and not is_system_admin(self.request.user) and not can_log_time(self.request.user, project):
+            raise PermissionDenied('Only project members can delete their own time entries.')
+        instance.delete()
+
+
+class WorkLogViewSet(ModelViewSet):
+    serializer_class = WorkLogSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        return WorkLog.objects.filter(user=self.request.user).select_related('user')
+
+    def perform_create(self, serializer):
+        project = serializer.validated_data.get('project')
+        if project and not can_log_time(self.request.user, project):
+            raise PermissionDenied('You must be a member of the selected project.')
+        serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        if serializer.instance.user_id != self.request.user.id:
+            raise PermissionDenied('You can only update your own work logs.')
+        project = serializer.validated_data.get('project', serializer.instance.project)
+        if project and not can_log_time(self.request.user, project):
+            raise PermissionDenied('You must be a member of the selected project.')
         serializer.save()
 
     def perform_destroy(self, instance):
-        if instance.user != self.request.user and not is_system_admin(self.request.user):
-            raise PermissionDenied('You can only delete your own time entries.')
-        if not is_system_admin(self.request.user) and not can_log_time(self.request.user, instance.project):
-            raise PermissionDenied('Only project team members can delete time entries.')
+        if instance.user_id != self.request.user.id:
+            raise PermissionDenied('You can only delete your own work logs.')
         instance.delete()

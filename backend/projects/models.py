@@ -63,6 +63,32 @@ class ProjectFavorite(models.Model):
         ]
 
 
+class CalendarEvent(models.Model):
+    """A personal calendar entry owned by one authenticated user."""
+
+    class Color(models.TextChoices):
+        BLUE = 'blue', 'Blue'
+        EMERALD = 'emerald', 'Emerald'
+        AMBER = 'amber', 'Amber'
+        ROSE = 'rose', 'Rose'
+        VIOLET = 'violet', 'Violet'
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='calendar_events')
+    title = models.CharField(max_length=200)
+    event_date = models.DateField()
+    event_time = models.TimeField(null=True, blank=True)
+    color = models.CharField(max_length=10, choices=Color, default=Color.BLUE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('event_date', 'event_time', 'id')
+        indexes = [models.Index(fields=('owner', 'event_date'))]
+
+    def __str__(self):
+        return f'{self.title} on {self.event_date}'
+
+
 class Task(models.Model):
     class Priority(models.TextChoices):
         LOW = 'low', 'Low'
@@ -135,21 +161,33 @@ class Task(models.Model):
 
 
 class TimeEntry(models.Model):
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='time_entries')
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='time_entries')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='time_entries')
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='recorded_time_entries')
     work_date = models.DateField(default=timezone.localdate)
     duration_minutes = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    notes = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ('-work_date',)
-        constraints = [
-            models.UniqueConstraint(
-                fields=('project', 'user', 'work_date'),
-                name='unique_daily_project_time_entry',
-            ),
-        ]
 
     def __str__(self):
-        return f'{self.user} — {self.project} ({self.work_date}: {self.duration_minutes} min)'
+        return f'{self.user} — {self.task} ({self.work_date}: {self.duration_minutes} min)'
+
+
+class WorkLog(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='work_logs')
+    project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.CASCADE, related_name='general_work_logs')
+    work_date = models.DateField(default=timezone.localdate)
+    duration_minutes = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    notes = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('-work_date', '-created_at')
+
+    def __str__(self):
+        return f'{self.user} — general work ({self.work_date}: {self.duration_minutes} min)'

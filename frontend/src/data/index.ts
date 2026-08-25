@@ -57,21 +57,111 @@ export type StatCard = {
 };
 
 export const overviewStats: StatCard[] = [
-  { label: "Total Revenue", value: "$284,392", change: 12.5, trend: "up", hint: "vs. last month" },
-  { label: "New Customers", value: "2,318", change: 8.2, trend: "up", hint: "vs. last month" },
-  { label: "Active Accounts", value: "18,472", change: 3.1, trend: "up", hint: "vs. last month" },
-  { label: "Churn Rate", value: "1.8%", change: 0.4, trend: "down", hint: "vs. last month" },
+  {
+    label: "Total Revenue",
+    value: "$284,392",
+    change: 12.5,
+    trend: "up",
+    hint: "vs. last month",
+  },
+  {
+    label: "New Customers",
+    value: "2,318",
+    change: 8.2,
+    trend: "up",
+    hint: "vs. last month",
+  },
+  {
+    label: "Active Accounts",
+    value: "18,472",
+    change: 3.1,
+    trend: "up",
+    hint: "vs. last month",
+  },
+  {
+    label: "Churn Rate",
+    value: "1.8%",
+    change: 0.4,
+    trend: "down",
+    hint: "vs. last month",
+  },
 ];
 
 export const ecommerceStats: StatCard[] = [
-  { label: "Gross Sales", value: "$52,420", change: 14.2, trend: "up", hint: "this month" },
-  { label: "Orders", value: "612", change: 9.7, trend: "up", hint: "this month" },
-  { label: "Avg. Order Value", value: "$85.65", change: 2.3, trend: "up", hint: "this month" },
-  { label: "Refunds", value: "$1,240", change: 1.1, trend: "down", hint: "this month" },
+  {
+    label: "Gross Sales",
+    value: "$52,420",
+    change: 14.2,
+    trend: "up",
+    hint: "this month",
+  },
+  {
+    label: "Orders",
+    value: "612",
+    change: 9.7,
+    trend: "up",
+    hint: "this month",
+  },
+  {
+    label: "Avg. Order Value",
+    value: "$85.65",
+    change: 2.3,
+    trend: "up",
+    hint: "this month",
+  },
+  {
+    label: "Refunds",
+    value: "$1,240",
+    change: 1.1,
+    trend: "down",
+    hint: "this month",
+  },
 ];
 
-const firstNames = ["Emma", "Liam", "Olivia", "Noah", "Ava", "Ethan", "Sophia", "Mason", "Isabella", "Lucas", "Mia", "Aiden", "Harper", "James", "Ella", "Benjamin", "Amelia", "Elijah", "Chloe", "Daniel"];
-const lastNames = ["Carter", "Reyes", "Nguyen", "Patel", "Kim", "Brooks", "Silva", "Novak", "Haddad", "Rossi", "Weber", "Costa", "Fischer", "Muller", "Ivanov", "Sato", "Cohen", "Bauer", "Lopez", "Dubois"];
+const firstNames = [
+  "Emma",
+  "Liam",
+  "Olivia",
+  "Noah",
+  "Ava",
+  "Ethan",
+  "Sophia",
+  "Mason",
+  "Isabella",
+  "Lucas",
+  "Mia",
+  "Aiden",
+  "Harper",
+  "James",
+  "Ella",
+  "Benjamin",
+  "Amelia",
+  "Elijah",
+  "Chloe",
+  "Daniel",
+];
+const lastNames = [
+  "Carter",
+  "Reyes",
+  "Nguyen",
+  "Patel",
+  "Kim",
+  "Brooks",
+  "Silva",
+  "Novak",
+  "Haddad",
+  "Rossi",
+  "Weber",
+  "Costa",
+  "Fischer",
+  "Muller",
+  "Ivanov",
+  "Sato",
+  "Cohen",
+  "Bauer",
+  "Lopez",
+  "Dubois",
+];
 
 function pick<T>(arr: T[], i: number): T {
   return arr[i % arr.length];
@@ -90,8 +180,32 @@ export type Customer = {
   joined: string;
 };
 
-const companies = ["Vertex Labs", "Northwind", "Lumen Co", "Aperture", "Blue Harbor", "Sunroot", "Kite Digital", "Foundry", "Meridian", "Ironclad", "Wavelength", "Silverpeak"];
-const locations = ["San Francisco, US", "London, UK", "Berlin, DE", "Toronto, CA", "Sydney, AU", "Tokyo, JP", "Paris, FR", "Austin, US", "Amsterdam, NL", "Singapore, SG"];
+const companies = [
+  "Vertex Labs",
+  "Northwind",
+  "Lumen Co",
+  "Aperture",
+  "Blue Harbor",
+  "Sunroot",
+  "Kite Digital",
+  "Foundry",
+  "Meridian",
+  "Ironclad",
+  "Wavelength",
+  "Silverpeak",
+];
+const locations = [
+  "San Francisco, US",
+  "London, UK",
+  "Berlin, DE",
+  "Toronto, CA",
+  "Sydney, AU",
+  "Tokyo, JP",
+  "Paris, FR",
+  "Austin, US",
+  "Amsterdam, NL",
+  "Singapore, SG",
+];
 const plans: Customer["plan"][] = ["Free", "Pro", "Enterprise"];
 const statuses: Customer["status"][] = ["Active", "Inactive", "Pending"];
 
@@ -124,9 +238,25 @@ export type Order = {
   method: string;
 };
 
-const products = ["Aurora Headphones", "Nimbus Keyboard", "Pulse Watch", "Vega Monitor", "Orbit Mouse", "Lumina Lamp", "Echo Speaker", "Zephyr Drone", "Cobalt Charger", "Terra Backpack"];
+const products = [
+  "Aurora Headphones",
+  "Nimbus Keyboard",
+  "Pulse Watch",
+  "Vega Monitor",
+  "Orbit Mouse",
+  "Lumina Lamp",
+  "Echo Speaker",
+  "Zephyr Drone",
+  "Cobalt Charger",
+  "Terra Backpack",
+];
 const methods = ["Visa", "Mastercard", "PayPal", "Apple Pay", "Amex"];
-const orderStatuses: Order["status"][] = ["Paid", "Pending", "Refunded", "Failed"];
+const orderStatuses: Order["status"][] = [
+  "Paid",
+  "Pending",
+  "Refunded",
+  "Failed",
+];
 
 export const orders: Order[] = Array.from({ length: 40 }, (_, i) => {
   const first = pick(firstNames, i * 2 + 1);
@@ -179,7 +309,8 @@ export const productList: Product[] = Array.from({ length: 24 }, (_, i) => {
     price: 19 + ((i * 41) % 480),
     stock,
     sold: 40 + ((i * 89) % 1200),
-    status: stock === 0 ? "Out of Stock" : stock < 20 ? "Low Stock" : "In Stock",
+    status:
+      stock === 0 ? "Out of Stock" : stock < 20 ? "Low Stock" : "In Stock",
     image: `https://api.dicebear.com/9.x/shapes/svg?seed=prd${i}`,
   };
 });
@@ -205,12 +336,54 @@ export type Activity = {
 };
 
 export const recentActivity: Activity[] = [
-  { id: "a1", user: "Emma Carter", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=1", action: "created a new order", target: "#ORD-7241", time: "2 min ago" },
-  { id: "a2", user: "Liam Nguyen", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=12", action: "upgraded to", target: "Enterprise plan", time: "18 min ago" },
-  { id: "a3", user: "Olivia Patel", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=5", action: "left a review on", target: "Pulse Watch", time: "1 hour ago" },
-  { id: "a4", user: "Noah Kim", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=13", action: "requested a refund for", target: "#ORD-7188", time: "3 hours ago" },
-  { id: "a5", user: "Ava Brooks", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=9", action: "invited a teammate to", target: "Vertex Labs", time: "5 hours ago" },
-  { id: "a6", user: "Ethan Silva", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=15", action: "completed onboarding", target: "", time: "Yesterday" },
+  {
+    id: "a1",
+    user: "Emma Carter",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=1",
+    action: "created a new order",
+    target: "#ORD-7241",
+    time: "2 min ago",
+  },
+  {
+    id: "a2",
+    user: "Liam Nguyen",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=12",
+    action: "upgraded to",
+    target: "Enterprise plan",
+    time: "18 min ago",
+  },
+  {
+    id: "a3",
+    user: "Olivia Patel",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=5",
+    action: "left a review on",
+    target: "Pulse Watch",
+    time: "1 hour ago",
+  },
+  {
+    id: "a4",
+    user: "Noah Kim",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=13",
+    action: "requested a refund for",
+    target: "#ORD-7188",
+    time: "3 hours ago",
+  },
+  {
+    id: "a5",
+    user: "Ava Brooks",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=9",
+    action: "invited a teammate to",
+    target: "Vertex Labs",
+    time: "5 hours ago",
+  },
+  {
+    id: "a6",
+    user: "Ethan Silva",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=15",
+    action: "completed onboarding",
+    target: "",
+    time: "Yesterday",
+  },
 ];
 
 export const currentUser = {
@@ -257,14 +430,23 @@ const lineItemCatalog = [
   { description: "Extra storage (100 GB)", unitPrice: 25 },
 ];
 
-const invoiceStatuses: Invoice["status"][] = ["Paid", "Pending", "Overdue", "Draft"];
+const invoiceStatuses: Invoice["status"][] = [
+  "Paid",
+  "Pending",
+  "Overdue",
+  "Draft",
+];
 
 export const invoices: Invoice[] = Array.from({ length: 14 }, (_, i) => {
   const cust = customers[(i * 3 + 1) % customers.length];
   const itemCount = (i % 3) + 1;
   const items: InvoiceItem[] = Array.from({ length: itemCount }, (_, j) => {
     const cat = lineItemCatalog[(i * 2 + j) % lineItemCatalog.length];
-    return { description: cat.description, qty: ((i + j) % 4) + 1, unitPrice: cat.unitPrice };
+    return {
+      description: cat.description,
+      qty: ((i + j) % 4) + 1,
+      unitPrice: cat.unitPrice,
+    };
   });
   const subtotal = items.reduce((a, b) => a + b.qty * b.unitPrice, 0);
   const tax = Math.round(subtotal * 0.08);
@@ -293,7 +475,9 @@ export const getCustomerById = (id: string) =>
   customers.find((c) => c.id === id);
 
 export const getOrderById = (id: string) =>
-  orders.find((o) => o.id === id || o.id === `#${id}` || o.id.replace("#", "") === id);
+  orders.find(
+    (o) => o.id === id || o.id === `#${id}` || o.id.replace("#", "") === id,
+  );
 
 export const getProductById = (id: string) =>
   productList.find((p) => p.id === id);
@@ -328,16 +512,106 @@ export type TeamMember = {
 };
 
 export const team: TeamMember[] = [
-  { id: "TM-01", name: "Alex Morgan", role: "Head of Product", department: "Product", email: "alex.morgan@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=8", status: "Active", location: "San Francisco, US" },
-  { id: "TM-02", name: "Sofia Rossi", role: "Head of Growth", department: "Marketing", email: "sofia.rossi@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=32", status: "Active", location: "Milan, IT" },
-  { id: "TM-03", name: "Marcus Chen", role: "Staff Engineer", department: "Engineering", email: "marcus.chen@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=33", status: "Away", location: "Singapore, SG" },
-  { id: "TM-04", name: "Priya Nair", role: "Product Designer", department: "Design", email: "priya.nair@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=45", status: "Active", location: "Bangalore, IN" },
-  { id: "TM-05", name: "Daniel Weber", role: "Backend Engineer", department: "Engineering", email: "daniel.weber@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=52", status: "Offline", location: "Berlin, DE" },
-  { id: "TM-06", name: "Hannah Kim", role: "Customer Success Lead", department: "Success", email: "hannah.kim@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=47", status: "Active", location: "Seoul, KR" },
-  { id: "TM-07", name: "Lucas Silva", role: "Data Analyst", department: "Data", email: "lucas.silva@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=59", status: "Active", location: "São Paulo, BR" },
-  { id: "TM-08", name: "Emma Novak", role: "Frontend Engineer", department: "Engineering", email: "emma.novak@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=41", status: "Away", location: "Toronto, CA" },
-  { id: "TM-09", name: "Omar Haddad", role: "DevOps Engineer", department: "Engineering", email: "omar.haddad@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=60", status: "Active", location: "Dubai, AE" },
-  { id: "TM-10", name: "Chloe Dubois", role: "Content Strategist", department: "Marketing", email: "chloe.dubois@orbynadmin.com", avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=44", status: "Offline", location: "Paris, FR" },
+  {
+    id: "TM-01",
+    name: "Alex Morgan",
+    role: "Head of Product",
+    department: "Product",
+    email: "alex.morgan@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=8",
+    status: "Active",
+    location: "San Francisco, US",
+  },
+  {
+    id: "TM-02",
+    name: "Sofia Rossi",
+    role: "Head of Growth",
+    department: "Marketing",
+    email: "sofia.rossi@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=32",
+    status: "Active",
+    location: "Milan, IT",
+  },
+  {
+    id: "TM-03",
+    name: "Marcus Chen",
+    role: "Staff Engineer",
+    department: "Engineering",
+    email: "marcus.chen@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=33",
+    status: "Away",
+    location: "Singapore, SG",
+  },
+  {
+    id: "TM-04",
+    name: "Priya Nair",
+    role: "Product Designer",
+    department: "Design",
+    email: "priya.nair@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=45",
+    status: "Active",
+    location: "Bangalore, IN",
+  },
+  {
+    id: "TM-05",
+    name: "Daniel Weber",
+    role: "Backend Engineer",
+    department: "Engineering",
+    email: "daniel.weber@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=52",
+    status: "Offline",
+    location: "Berlin, DE",
+  },
+  {
+    id: "TM-06",
+    name: "Hannah Kim",
+    role: "Customer Success Lead",
+    department: "Success",
+    email: "hannah.kim@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=47",
+    status: "Active",
+    location: "Seoul, KR",
+  },
+  {
+    id: "TM-07",
+    name: "Lucas Silva",
+    role: "Data Analyst",
+    department: "Data",
+    email: "lucas.silva@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=59",
+    status: "Active",
+    location: "São Paulo, BR",
+  },
+  {
+    id: "TM-08",
+    name: "Emma Novak",
+    role: "Frontend Engineer",
+    department: "Engineering",
+    email: "emma.novak@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=41",
+    status: "Away",
+    location: "Toronto, CA",
+  },
+  {
+    id: "TM-09",
+    name: "Omar Haddad",
+    role: "DevOps Engineer",
+    department: "Engineering",
+    email: "omar.haddad@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=60",
+    status: "Active",
+    location: "Dubai, AE",
+  },
+  {
+    id: "TM-10",
+    name: "Chloe Dubois",
+    role: "Content Strategist",
+    department: "Marketing",
+    email: "chloe.dubois@orbynadmin.com",
+    avatar: "https://api.dicebear.com/9.x/avataaars/svg?seed=44",
+    status: "Offline",
+    location: "Paris, FR",
+  },
 ];
 
 export const getTeamMember = (i: number) => team[i % team.length];
@@ -347,7 +621,8 @@ export const getTeamMember = (i: number) => team[i % team.length];
 // ---------------------------------------------------------------------------
 
 export type ProjectStatus = "On Track" | "At Risk" | "Delayed" | "Completed";
-export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
+export type TaskStatus =
+  "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
 export type TaskPriority = "Low" | "Medium" | "High" | "Urgent";
 
 export type Task = {
@@ -363,6 +638,7 @@ export type Task = {
   due: string;
   points: number;
   weight?: number;
+  totalTimeMinutes?: number;
   approvedProgress?: number;
   reportedProgress?: number;
   progressState?: "draft" | "pending_review" | "approved" | "rejected";
@@ -388,17 +664,66 @@ export type Project = {
   budget: number;
   spent: number;
   taskCounts: { total: number; done: number };
+  totalTimeMinutes?: number;
   milestones: Milestone[];
   starred?: boolean;
 };
 
 const projectSeeds = [
-  { name: "Mobile App Revamp", key: "MOB", category: "Product", color: "var(--chart-1)", status: "On Track" as ProjectStatus, progress: 68, desc: "Rebuild the iOS & Android apps on a shared design system with offline support." },
-  { name: "Billing Platform v2", key: "BILL", category: "Engineering", color: "var(--chart-2)", status: "At Risk" as ProjectStatus, progress: 42, desc: "Migrate invoicing and subscriptions to the new metered billing engine." },
-  { name: "Website Redesign", key: "WEB", category: "Marketing", color: "var(--chart-3)", status: "On Track" as ProjectStatus, progress: 81, desc: "Refresh orbynadmin.com with a new brand, CMS and localized landing pages." },
-  { name: "Data Warehouse", key: "DATA", category: "Data", color: "var(--chart-4)", status: "Delayed" as ProjectStatus, progress: 34, desc: "Consolidate product analytics into a governed warehouse with dbt models." },
-  { name: "Onboarding Overhaul", key: "ONB", category: "Product", color: "var(--chart-5)", status: "On Track" as ProjectStatus, progress: 55, desc: "Redesign activation flow to lift week-1 retention with checklists & tours." },
-  { name: "SOC 2 Compliance", key: "SEC", category: "Security", color: "var(--chart-1)", status: "Completed" as ProjectStatus, progress: 100, desc: "Achieve SOC 2 Type II with audited controls, policies and monitoring." },
+  {
+    name: "Mobile App Revamp",
+    key: "MOB",
+    category: "Product",
+    color: "var(--chart-1)",
+    status: "On Track" as ProjectStatus,
+    progress: 68,
+    desc: "Rebuild the iOS & Android apps on a shared design system with offline support.",
+  },
+  {
+    name: "Billing Platform v2",
+    key: "BILL",
+    category: "Engineering",
+    color: "var(--chart-2)",
+    status: "At Risk" as ProjectStatus,
+    progress: 42,
+    desc: "Migrate invoicing and subscriptions to the new metered billing engine.",
+  },
+  {
+    name: "Website Redesign",
+    key: "WEB",
+    category: "Marketing",
+    color: "var(--chart-3)",
+    status: "On Track" as ProjectStatus,
+    progress: 81,
+    desc: "Refresh orbynadmin.com with a new brand, CMS and localized landing pages.",
+  },
+  {
+    name: "Data Warehouse",
+    key: "DATA",
+    category: "Data",
+    color: "var(--chart-4)",
+    status: "Delayed" as ProjectStatus,
+    progress: 34,
+    desc: "Consolidate product analytics into a governed warehouse with dbt models.",
+  },
+  {
+    name: "Onboarding Overhaul",
+    key: "ONB",
+    category: "Product",
+    color: "var(--chart-5)",
+    status: "On Track" as ProjectStatus,
+    progress: 55,
+    desc: "Redesign activation flow to lift week-1 retention with checklists & tours.",
+  },
+  {
+    name: "SOC 2 Compliance",
+    key: "SEC",
+    category: "Security",
+    color: "var(--chart-1)",
+    status: "Completed" as ProjectStatus,
+    progress: 100,
+    desc: "Achieve SOC 2 Type II with audited controls, policies and monitoring.",
+  },
 ];
 
 export const projects: Project[] = projectSeeds.map((p, i) => {
@@ -428,7 +753,11 @@ export const projects: Project[] = projectSeeds.map((p, i) => {
       { title: "Kickoff & discovery", date: "2026-04-12", done: true },
       { title: "Design sign-off", date: "2026-05-28", done: p.progress > 40 },
       { title: "Beta release", date: "2026-07-15", done: p.progress > 70 },
-      { title: "General availability", date: "2026-09-30", done: p.progress === 100 },
+      {
+        title: "General availability",
+        date: "2026-09-30",
+        done: p.progress === 100,
+      },
     ],
   };
 });
@@ -436,18 +765,49 @@ export const projects: Project[] = projectSeeds.map((p, i) => {
 export const getProjectById = (id: string) => projects.find((p) => p.id === id);
 
 const taskTitles = [
-  "Design new onboarding checklist", "Fix flaky auth integration tests", "Implement metered usage events",
-  "Migrate legacy invoice PDFs", "Add dark mode to marketing site", "Set up dbt staging models",
-  "Write API rate-limit middleware", "Ship push notifications", "Redesign settings page",
-  "Add SSO / SAML provisioning", "Instrument activation funnel", "Localize pricing page (DE/FR)",
-  "Build billing webhooks retry", "Create component storybook", "Audit accessibility (WCAG AA)",
-  "Optimize dashboard query latency", "Add CSV import for contacts", "Set up incident runbooks",
-  "Refactor navigation sidebar", "Draft SOC 2 access policy", "Add empty states across app",
-  "Wire up Slack notifications", "Improve search relevance", "Reduce cold-start bundle size",
+  "Design new onboarding checklist",
+  "Fix flaky auth integration tests",
+  "Implement metered usage events",
+  "Migrate legacy invoice PDFs",
+  "Add dark mode to marketing site",
+  "Set up dbt staging models",
+  "Write API rate-limit middleware",
+  "Ship push notifications",
+  "Redesign settings page",
+  "Add SSO / SAML provisioning",
+  "Instrument activation funnel",
+  "Localize pricing page (DE/FR)",
+  "Build billing webhooks retry",
+  "Create component storybook",
+  "Audit accessibility (WCAG AA)",
+  "Optimize dashboard query latency",
+  "Add CSV import for contacts",
+  "Set up incident runbooks",
+  "Refactor navigation sidebar",
+  "Draft SOC 2 access policy",
+  "Add empty states across app",
+  "Wire up Slack notifications",
+  "Improve search relevance",
+  "Reduce cold-start bundle size",
 ];
-const allTaskStatuses: TaskStatus[] = ["Backlog", "Todo", "In Progress", "In Review", "Done"];
+const allTaskStatuses: TaskStatus[] = [
+  "Backlog",
+  "Todo",
+  "In Progress",
+  "In Review",
+  "Done",
+];
 const allPriorities: TaskPriority[] = ["Low", "Medium", "High", "Urgent"];
-const labelPool = ["frontend", "backend", "design", "bug", "feature", "infra", "docs", "research"];
+const labelPool = [
+  "frontend",
+  "backend",
+  "design",
+  "bug",
+  "feature",
+  "infra",
+  "docs",
+  "research",
+];
 
 export const projectTasks: Task[] = taskTitles.map((title, i) => {
   const project = projects[i % projects.length];
@@ -459,7 +819,10 @@ export const projectTasks: Task[] = taskTitles.map((title, i) => {
     status: allTaskStatuses[statusIdx],
     priority: allPriorities[(i * 3) % allPriorities.length],
     assignee: getTeamMember(i + 2),
-    labels: [labelPool[i % labelPool.length], labelPool[(i * 5 + 2) % labelPool.length]].filter((v, idx, a) => a.indexOf(v) === idx),
+    labels: [
+      labelPool[i % labelPool.length],
+      labelPool[(i * 5 + 2) % labelPool.length],
+    ].filter((v, idx, a) => a.indexOf(v) === idx),
     projectId: project.id,
     start: calendarDate(2026, 6, ((i * 2) % 20) + 1),
     due: calendarDate(2026, 6, ((i * 3) % 24) + 4),
@@ -479,7 +842,8 @@ export const tasksForProject = (projectId: string) =>
 export type FileNode = {
   id: string;
   name: string;
-  kind: "folder" | "image" | "document" | "video" | "audio" | "archive" | "code";
+  kind:
+    "folder" | "image" | "document" | "video" | "audio" | "archive" | "code";
   size: string;
   modified: string;
   owner: TeamMember;
@@ -488,18 +852,108 @@ export type FileNode = {
 };
 
 export const files: FileNode[] = [
-  { id: "F-01", name: "Brand Assets", kind: "folder", size: "—", items: 128, modified: "2026-07-10", owner: getTeamMember(3), starred: true },
-  { id: "F-02", name: "Product Specs", kind: "folder", size: "—", items: 64, modified: "2026-07-12", owner: getTeamMember(0) },
-  { id: "F-03", name: "Marketing", kind: "folder", size: "—", items: 42, modified: "2026-07-08", owner: getTeamMember(1) },
-  { id: "F-04", name: "Engineering", kind: "folder", size: "—", items: 210, modified: "2026-07-14", owner: getTeamMember(2), starred: true },
-  { id: "F-05", name: "Q3-roadmap.pdf", kind: "document", size: "2.4 MB", modified: "2026-07-15", owner: getTeamMember(0) },
-  { id: "F-06", name: "hero-shot-final.png", kind: "image", size: "5.1 MB", modified: "2026-07-13", owner: getTeamMember(3) },
-  { id: "F-07", name: "demo-walkthrough.mp4", kind: "video", size: "84 MB", modified: "2026-07-11", owner: getTeamMember(1) },
-  { id: "F-08", name: "pricing-tiers.xlsx", kind: "document", size: "412 KB", modified: "2026-07-09", owner: getTeamMember(6) },
-  { id: "F-09", name: "logo-pack.zip", kind: "archive", size: "18 MB", modified: "2026-07-07", owner: getTeamMember(3) },
-  { id: "F-10", name: "api-reference.md", kind: "code", size: "96 KB", modified: "2026-07-14", owner: getTeamMember(2) },
-  { id: "F-11", name: "onboarding-voiceover.mp3", kind: "audio", size: "12 MB", modified: "2026-07-06", owner: getTeamMember(9) },
-  { id: "F-12", name: "customer-interviews.pdf", kind: "document", size: "3.8 MB", modified: "2026-07-05", owner: getTeamMember(5) },
+  {
+    id: "F-01",
+    name: "Brand Assets",
+    kind: "folder",
+    size: "—",
+    items: 128,
+    modified: "2026-07-10",
+    owner: getTeamMember(3),
+    starred: true,
+  },
+  {
+    id: "F-02",
+    name: "Product Specs",
+    kind: "folder",
+    size: "—",
+    items: 64,
+    modified: "2026-07-12",
+    owner: getTeamMember(0),
+  },
+  {
+    id: "F-03",
+    name: "Marketing",
+    kind: "folder",
+    size: "—",
+    items: 42,
+    modified: "2026-07-08",
+    owner: getTeamMember(1),
+  },
+  {
+    id: "F-04",
+    name: "Engineering",
+    kind: "folder",
+    size: "—",
+    items: 210,
+    modified: "2026-07-14",
+    owner: getTeamMember(2),
+    starred: true,
+  },
+  {
+    id: "F-05",
+    name: "Q3-roadmap.pdf",
+    kind: "document",
+    size: "2.4 MB",
+    modified: "2026-07-15",
+    owner: getTeamMember(0),
+  },
+  {
+    id: "F-06",
+    name: "hero-shot-final.png",
+    kind: "image",
+    size: "5.1 MB",
+    modified: "2026-07-13",
+    owner: getTeamMember(3),
+  },
+  {
+    id: "F-07",
+    name: "demo-walkthrough.mp4",
+    kind: "video",
+    size: "84 MB",
+    modified: "2026-07-11",
+    owner: getTeamMember(1),
+  },
+  {
+    id: "F-08",
+    name: "pricing-tiers.xlsx",
+    kind: "document",
+    size: "412 KB",
+    modified: "2026-07-09",
+    owner: getTeamMember(6),
+  },
+  {
+    id: "F-09",
+    name: "logo-pack.zip",
+    kind: "archive",
+    size: "18 MB",
+    modified: "2026-07-07",
+    owner: getTeamMember(3),
+  },
+  {
+    id: "F-10",
+    name: "api-reference.md",
+    kind: "code",
+    size: "96 KB",
+    modified: "2026-07-14",
+    owner: getTeamMember(2),
+  },
+  {
+    id: "F-11",
+    name: "onboarding-voiceover.mp3",
+    kind: "audio",
+    size: "12 MB",
+    modified: "2026-07-06",
+    owner: getTeamMember(9),
+  },
+  {
+    id: "F-12",
+    name: "customer-interviews.pdf",
+    kind: "document",
+    size: "3.8 MB",
+    modified: "2026-07-05",
+    owner: getTeamMember(5),
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -517,25 +971,122 @@ export type Integration = {
 };
 
 export const integrations: Integration[] = [
-  { id: "IN-01", name: "Slack", category: "Communication", description: "Get alerts and updates in your channels.", connected: true, initial: "S", color: "oklch(0.62 0.19 25)" },
-  { id: "IN-02", name: "GitHub", category: "Developer", description: "Link pull requests and deployments.", connected: true, initial: "G", color: "oklch(0.4 0 0)" },
-  { id: "IN-03", name: "Stripe", category: "Payments", description: "Sync invoices, subscriptions and payouts.", connected: true, initial: "S", color: "oklch(0.55 0.2 285)" },
-  { id: "IN-04", name: "Figma", category: "Design", description: "Embed designs and prototypes.", connected: false, initial: "F", color: "oklch(0.62 0.21 25)" },
-  { id: "IN-05", name: "Notion", category: "Productivity", description: "Link docs and knowledge base.", connected: false, initial: "N", color: "oklch(0.3 0 0)" },
-  { id: "IN-06", name: "Linear", category: "Developer", description: "Two-way sync issues and cycles.", connected: true, initial: "L", color: "oklch(0.55 0.22 275)" },
-  { id: "IN-07", name: "Google Drive", category: "Storage", description: "Attach files from Drive.", connected: false, initial: "D", color: "oklch(0.7 0.17 145)" },
-  { id: "IN-08", name: "Zoom", category: "Communication", description: "Start meetings from any record.", connected: false, initial: "Z", color: "oklch(0.6 0.2 255)" },
-  { id: "IN-09", name: "HubSpot", category: "Marketing", description: "Sync contacts and campaigns.", connected: false, initial: "H", color: "oklch(0.65 0.2 35)" },
-  { id: "IN-10", name: "Jira", category: "Developer", description: "Import epics and sprints.", connected: false, initial: "J", color: "oklch(0.58 0.2 260)" },
-  { id: "IN-11", name: "Intercom", category: "Support", description: "See conversations inline.", connected: true, initial: "I", color: "oklch(0.6 0.18 245)" },
-  { id: "IN-12", name: "Segment", category: "Data", description: "Stream events to your warehouse.", connected: false, initial: "S", color: "oklch(0.7 0.18 155)" },
+  {
+    id: "IN-01",
+    name: "Slack",
+    category: "Communication",
+    description: "Get alerts and updates in your channels.",
+    connected: true,
+    initial: "S",
+    color: "oklch(0.62 0.19 25)",
+  },
+  {
+    id: "IN-02",
+    name: "GitHub",
+    category: "Developer",
+    description: "Link pull requests and deployments.",
+    connected: true,
+    initial: "G",
+    color: "oklch(0.4 0 0)",
+  },
+  {
+    id: "IN-03",
+    name: "Stripe",
+    category: "Payments",
+    description: "Sync invoices, subscriptions and payouts.",
+    connected: true,
+    initial: "S",
+    color: "oklch(0.55 0.2 285)",
+  },
+  {
+    id: "IN-04",
+    name: "Figma",
+    category: "Design",
+    description: "Embed designs and prototypes.",
+    connected: false,
+    initial: "F",
+    color: "oklch(0.62 0.21 25)",
+  },
+  {
+    id: "IN-05",
+    name: "Notion",
+    category: "Productivity",
+    description: "Link docs and knowledge base.",
+    connected: false,
+    initial: "N",
+    color: "oklch(0.3 0 0)",
+  },
+  {
+    id: "IN-06",
+    name: "Linear",
+    category: "Developer",
+    description: "Two-way sync issues and cycles.",
+    connected: true,
+    initial: "L",
+    color: "oklch(0.55 0.22 275)",
+  },
+  {
+    id: "IN-07",
+    name: "Google Drive",
+    category: "Storage",
+    description: "Attach files from Drive.",
+    connected: false,
+    initial: "D",
+    color: "oklch(0.7 0.17 145)",
+  },
+  {
+    id: "IN-08",
+    name: "Zoom",
+    category: "Communication",
+    description: "Start meetings from any record.",
+    connected: false,
+    initial: "Z",
+    color: "oklch(0.6 0.2 255)",
+  },
+  {
+    id: "IN-09",
+    name: "HubSpot",
+    category: "Marketing",
+    description: "Sync contacts and campaigns.",
+    connected: false,
+    initial: "H",
+    color: "oklch(0.65 0.2 35)",
+  },
+  {
+    id: "IN-10",
+    name: "Jira",
+    category: "Developer",
+    description: "Import epics and sprints.",
+    connected: false,
+    initial: "J",
+    color: "oklch(0.58 0.2 260)",
+  },
+  {
+    id: "IN-11",
+    name: "Intercom",
+    category: "Support",
+    description: "See conversations inline.",
+    connected: true,
+    initial: "I",
+    color: "oklch(0.6 0.18 245)",
+  },
+  {
+    id: "IN-12",
+    name: "Segment",
+    category: "Data",
+    description: "Stream events to your warehouse.",
+    connected: false,
+    initial: "S",
+    color: "oklch(0.7 0.18 155)",
+  },
 ];
 
 // ---------------------------------------------------------------------------
 // Notifications
 // ---------------------------------------------------------------------------
 
-export type NotificationKind = "mention" | "comment" | "assign" | "system" | "billing" | "deploy";
+export type NotificationKind =
+  "mention" | "comment" | "assign" | "system" | "billing" | "deploy";
 
 export type Notification = {
   id: string;
@@ -548,16 +1099,93 @@ export type Notification = {
 };
 
 export const notifications: Notification[] = [
-  { id: "N-01", kind: "mention", title: "Priya Nair mentioned you", description: "“@alex can you review the new onboarding checklist?” in Mobile App Revamp", actor: getTeamMember(3), time: "2 min ago", read: false },
-  { id: "N-02", kind: "assign", title: "New task assigned", description: "You were assigned “Implement metered usage events” in Billing Platform v2", actor: getTeamMember(2), time: "25 min ago", read: false },
-  { id: "N-03", kind: "comment", title: "Marcus Chen commented", description: "Left a comment on “Add SSO / SAML provisioning”", actor: getTeamMember(2), time: "1 hour ago", read: false },
-  { id: "N-04", kind: "deploy", title: "Deployment succeeded", description: "web-app v2.14.0 deployed to production in 3m 12s", time: "2 hours ago", read: true },
-  { id: "N-05", kind: "billing", title: "Payment received", description: "Invoice INV-2043 was paid by Northwind — $1,296.00", time: "4 hours ago", read: true },
-  { id: "N-06", kind: "system", title: "New sign-in detected", description: "A new sign-in from Chrome on macOS in San Francisco", time: "6 hours ago", read: true },
-  { id: "N-07", kind: "comment", title: "Sofia Rossi commented", description: "“Looks great — shipping the localized pages next week.”", actor: getTeamMember(1), time: "Yesterday", read: true },
-  { id: "N-08", kind: "mention", title: "Hannah Kim mentioned you", description: "“@alex a customer asked about the Q3 roadmap.”", actor: getTeamMember(5), time: "Yesterday", read: true },
-  { id: "N-09", kind: "assign", title: "Milestone due soon", description: "“Beta release” for Mobile App Revamp is due in 3 days", time: "2 days ago", read: true },
-  { id: "N-10", kind: "system", title: "Storage at 82%", description: "Your workspace is approaching its storage limit", time: "3 days ago", read: true },
+  {
+    id: "N-01",
+    kind: "mention",
+    title: "Priya Nair mentioned you",
+    description:
+      "“@alex can you review the new onboarding checklist?” in Mobile App Revamp",
+    actor: getTeamMember(3),
+    time: "2 min ago",
+    read: false,
+  },
+  {
+    id: "N-02",
+    kind: "assign",
+    title: "New task assigned",
+    description:
+      "You were assigned “Implement metered usage events” in Billing Platform v2",
+    actor: getTeamMember(2),
+    time: "25 min ago",
+    read: false,
+  },
+  {
+    id: "N-03",
+    kind: "comment",
+    title: "Marcus Chen commented",
+    description: "Left a comment on “Add SSO / SAML provisioning”",
+    actor: getTeamMember(2),
+    time: "1 hour ago",
+    read: false,
+  },
+  {
+    id: "N-04",
+    kind: "deploy",
+    title: "Deployment succeeded",
+    description: "web-app v2.14.0 deployed to production in 3m 12s",
+    time: "2 hours ago",
+    read: true,
+  },
+  {
+    id: "N-05",
+    kind: "billing",
+    title: "Payment received",
+    description: "Invoice INV-2043 was paid by Northwind — $1,296.00",
+    time: "4 hours ago",
+    read: true,
+  },
+  {
+    id: "N-06",
+    kind: "system",
+    title: "New sign-in detected",
+    description: "A new sign-in from Chrome on macOS in San Francisco",
+    time: "6 hours ago",
+    read: true,
+  },
+  {
+    id: "N-07",
+    kind: "comment",
+    title: "Sofia Rossi commented",
+    description: "“Looks great — shipping the localized pages next week.”",
+    actor: getTeamMember(1),
+    time: "Yesterday",
+    read: true,
+  },
+  {
+    id: "N-08",
+    kind: "mention",
+    title: "Hannah Kim mentioned you",
+    description: "“@alex a customer asked about the Q3 roadmap.”",
+    actor: getTeamMember(5),
+    time: "Yesterday",
+    read: true,
+  },
+  {
+    id: "N-09",
+    kind: "assign",
+    title: "Milestone due soon",
+    description: "“Beta release” for Mobile App Revamp is due in 3 days",
+    time: "2 days ago",
+    read: true,
+  },
+  {
+    id: "N-10",
+    kind: "system",
+    title: "Storage at 82%",
+    description: "Your workspace is approaching its storage limit",
+    time: "3 days ago",
+    read: true,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -578,14 +1206,86 @@ export type CryptoAsset = {
 };
 
 export const cryptoAssets: CryptoAsset[] = [
-  { symbol: "BTC", name: "Bitcoin", chain: "Bitcoin", price: 68214.32, change24h: 2.4, holdings: 0.684, color: "#F7931A", spark: [64100, 63800, 65200, 66100, 65700, 67300, 68214] },
-  { symbol: "ETH", name: "Ethereum", chain: "Ethereum", price: 3541.08, change24h: 3.8, holdings: 9.2, color: "#627EEA", spark: [3280, 3325, 3298, 3410, 3388, 3472, 3541] },
-  { symbol: "SOL", name: "Solana", chain: "Solana", price: 168.24, change24h: 7.1, holdings: 120, color: "#14B8A6", spark: [141, 148, 152, 149, 158, 163, 168] },
-  { symbol: "BNB", name: "BNB", chain: "BNB Chain", price: 592.4, change24h: -1.2, holdings: 14, color: "#D9A400", spark: [612, 604, 598, 601, 595, 599, 592] },
-  { symbol: "USDC", name: "USD Coin", chain: "Ethereum", price: 1.0, change24h: 0.0, holdings: 12000, color: "#2775CA", spark: [1, 1, 1, 1, 1, 1, 1] },
-  { symbol: "XRP", name: "XRP", chain: "XRP Ledger", price: 0.62, change24h: -2.8, holdings: 9000, color: "#475569", spark: [0.66, 0.65, 0.64, 0.63, 0.64, 0.63, 0.62] },
-  { symbol: "ADA", name: "Cardano", chain: "Cardano", price: 0.46, change24h: 4.2, holdings: 6500, color: "#2B6BE4", spark: [0.42, 0.43, 0.44, 0.43, 0.45, 0.45, 0.46] },
-  { symbol: "POL", name: "Polygon", chain: "Polygon", price: 0.72, change24h: -3.4, holdings: 700, color: "#7C3AED", spark: [0.78, 0.76, 0.75, 0.74, 0.73, 0.74, 0.72] },
+  {
+    symbol: "BTC",
+    name: "Bitcoin",
+    chain: "Bitcoin",
+    price: 68214.32,
+    change24h: 2.4,
+    holdings: 0.684,
+    color: "#F7931A",
+    spark: [64100, 63800, 65200, 66100, 65700, 67300, 68214],
+  },
+  {
+    symbol: "ETH",
+    name: "Ethereum",
+    chain: "Ethereum",
+    price: 3541.08,
+    change24h: 3.8,
+    holdings: 9.2,
+    color: "#627EEA",
+    spark: [3280, 3325, 3298, 3410, 3388, 3472, 3541],
+  },
+  {
+    symbol: "SOL",
+    name: "Solana",
+    chain: "Solana",
+    price: 168.24,
+    change24h: 7.1,
+    holdings: 120,
+    color: "#14B8A6",
+    spark: [141, 148, 152, 149, 158, 163, 168],
+  },
+  {
+    symbol: "BNB",
+    name: "BNB",
+    chain: "BNB Chain",
+    price: 592.4,
+    change24h: -1.2,
+    holdings: 14,
+    color: "#D9A400",
+    spark: [612, 604, 598, 601, 595, 599, 592],
+  },
+  {
+    symbol: "USDC",
+    name: "USD Coin",
+    chain: "Ethereum",
+    price: 1.0,
+    change24h: 0.0,
+    holdings: 12000,
+    color: "#2775CA",
+    spark: [1, 1, 1, 1, 1, 1, 1],
+  },
+  {
+    symbol: "XRP",
+    name: "XRP",
+    chain: "XRP Ledger",
+    price: 0.62,
+    change24h: -2.8,
+    holdings: 9000,
+    color: "#475569",
+    spark: [0.66, 0.65, 0.64, 0.63, 0.64, 0.63, 0.62],
+  },
+  {
+    symbol: "ADA",
+    name: "Cardano",
+    chain: "Cardano",
+    price: 0.46,
+    change24h: 4.2,
+    holdings: 6500,
+    color: "#2B6BE4",
+    spark: [0.42, 0.43, 0.44, 0.43, 0.45, 0.45, 0.46],
+  },
+  {
+    symbol: "POL",
+    name: "Polygon",
+    chain: "Polygon",
+    price: 0.72,
+    change24h: -3.4,
+    holdings: 700,
+    color: "#7C3AED",
+    spark: [0.78, 0.76, 0.75, 0.74, 0.73, 0.74, 0.72],
+  },
 ];
 
 // Portfolio value over several time ranges, generated deterministically at
@@ -595,7 +1295,7 @@ function genSeries(
   start: number,
   end: number,
   volatility: number,
-  seed: number
+  seed: number,
 ): { t: string; value: number }[] {
   const n = labels.length;
   return labels.map((t, i) => {
@@ -608,10 +1308,26 @@ function genSeries(
   });
 }
 
-const hours = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
+const hours = Array.from(
+  { length: 24 },
+  (_, i) => `${String(i).padStart(2, "0")}:00`,
+);
 const days30 = Array.from({ length: 30 }, (_, i) => `${i + 1}`);
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const monthsYear = ["Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"];
+const monthsYear = [
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+];
 
 export const cryptoPortfolioRanges: Record<
   string,
@@ -635,14 +1351,100 @@ export type CryptoTx = {
 };
 
 export const cryptoTransactions: CryptoTx[] = [
-  { id: "TX-9F2A", type: "Buy", asset: "ETH", amount: 1.5, value: 5311.62, time: "2 min ago", status: "Completed" },
-  { id: "TX-7C4B", type: "Receive", asset: "USDC", detail: "from 0x8f…3a91", amount: 2500, value: 2500, time: "18 min ago", status: "Completed" },
-  { id: "TX-5A18", type: "Swap", asset: "SOL", detail: "USDC → SOL", amount: 12.4, value: 2086.18, time: "1 hour ago", status: "Completed" },
-  { id: "TX-2E90", type: "Stake", asset: "ETH", detail: "Lido", amount: 3.0, value: 10623.24, time: "3 hours ago", status: "Completed" },
-  { id: "TX-1D77", type: "Sell", asset: "POL", amount: 1800, value: 1296, time: "5 hours ago", status: "Completed" },
-  { id: "TX-8B03", type: "Send", asset: "BTC", detail: "to 0x1c…9d2f", amount: 0.05, value: 3410.72, time: "Yesterday", status: "Completed" },
-  { id: "TX-6F55", type: "Buy", asset: "BTC", amount: 0.12, value: 8185.72, time: "Yesterday", status: "Completed" },
-  { id: "TX-4A2C", type: "Swap", asset: "ADA", detail: "XRP → ADA", amount: 4200, value: 1932, time: "2 days ago", status: "Pending" },
-  { id: "TX-3E81", type: "Receive", asset: "SOL", detail: "from 0x4b…7e10", amount: 40, value: 6729.6, time: "2 days ago", status: "Completed" },
-  { id: "TX-0C6D", type: "Sell", asset: "BNB", amount: 6, value: 3554.4, time: "3 days ago", status: "Failed" },
+  {
+    id: "TX-9F2A",
+    type: "Buy",
+    asset: "ETH",
+    amount: 1.5,
+    value: 5311.62,
+    time: "2 min ago",
+    status: "Completed",
+  },
+  {
+    id: "TX-7C4B",
+    type: "Receive",
+    asset: "USDC",
+    detail: "from 0x8f…3a91",
+    amount: 2500,
+    value: 2500,
+    time: "18 min ago",
+    status: "Completed",
+  },
+  {
+    id: "TX-5A18",
+    type: "Swap",
+    asset: "SOL",
+    detail: "USDC → SOL",
+    amount: 12.4,
+    value: 2086.18,
+    time: "1 hour ago",
+    status: "Completed",
+  },
+  {
+    id: "TX-2E90",
+    type: "Stake",
+    asset: "ETH",
+    detail: "Lido",
+    amount: 3.0,
+    value: 10623.24,
+    time: "3 hours ago",
+    status: "Completed",
+  },
+  {
+    id: "TX-1D77",
+    type: "Sell",
+    asset: "POL",
+    amount: 1800,
+    value: 1296,
+    time: "5 hours ago",
+    status: "Completed",
+  },
+  {
+    id: "TX-8B03",
+    type: "Send",
+    asset: "BTC",
+    detail: "to 0x1c…9d2f",
+    amount: 0.05,
+    value: 3410.72,
+    time: "Yesterday",
+    status: "Completed",
+  },
+  {
+    id: "TX-6F55",
+    type: "Buy",
+    asset: "BTC",
+    amount: 0.12,
+    value: 8185.72,
+    time: "Yesterday",
+    status: "Completed",
+  },
+  {
+    id: "TX-4A2C",
+    type: "Swap",
+    asset: "ADA",
+    detail: "XRP → ADA",
+    amount: 4200,
+    value: 1932,
+    time: "2 days ago",
+    status: "Pending",
+  },
+  {
+    id: "TX-3E81",
+    type: "Receive",
+    asset: "SOL",
+    detail: "from 0x4b…7e10",
+    amount: 40,
+    value: 6729.6,
+    time: "2 days ago",
+    status: "Completed",
+  },
+  {
+    id: "TX-0C6D",
+    type: "Sell",
+    asset: "BNB",
+    amount: 6,
+    value: 3554.4,
+    time: "3 days ago",
+    status: "Failed",
+  },
 ];
