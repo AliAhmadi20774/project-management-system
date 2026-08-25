@@ -20,6 +20,8 @@ import {
   IconShieldLock,
   IconAddressBook,
   IconSearch,
+  IconClock,
+  IconMessageCircle,
   type Icon,
 } from "@tabler/icons-react";
 
@@ -76,6 +78,8 @@ export const navGroups: NavGroup[] = [
       { title: "Kanban", url: "/apps/kanban", icon: IconLayoutKanban },
       { title: "Tasks", url: "/apps/tasks", icon: IconChecklist },
       { title: "Notes", url: "/apps/notes", icon: IconNotes },
+      { title: "Chat", url: "/apps/chat", icon: IconMessageCircle },
+      { title: "Time", url: "/time", icon: IconClock },
     ],
   },
   {
@@ -116,4 +120,4 @@ export const navGroups: NavGroup[] = [
       },
     ],
   },
-];
+].filter((group) => group.label !== "Pages");

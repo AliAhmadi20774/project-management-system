@@ -1,45 +1,39 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  IconPlus,
-  IconSearch,
-  IconNotes,
-  IconBriefcase,
-  IconUser,
-  IconBulb,
   IconArchive,
+  IconArrowLeft,
+  IconBriefcase,
+  IconBulb,
+  IconChevronLeft,
+  IconChevronRight,
+  IconDots,
+  IconNotes,
+  IconPalette,
   IconPin,
   IconPinnedFilled,
-  IconTrash,
-  IconPalette,
-  IconDots,
-  IconSquare,
-  IconSquareCheck,
+  IconPlus,
+  IconSearch,
   IconTag,
-  IconClock,
-  IconShare3,
-  IconArrowLeft,
+  IconTrash,
+  IconUser,
 } from "@tabler/icons-react";
-
 import { toast } from "sonner";
-
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { DeleteDialog } from "@/components/delete-dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { NoteEditor } from "@/components/notes/note-editor";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -47,815 +41,556 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DeleteDialog } from "@/components/delete-dialog";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-type NoteColor = "blue" | "violet" | "emerald" | "amber" | "rose" | "slate";
-type FolderId = "work" | "personal" | "ideas" | "archive";
-
-type ChecklistItem = { id: string; text: string; done: boolean };
-
+type Folder = "work" | "personal" | "ideas" | "archive";
+type Color = "blue" | "violet" | "emerald" | "amber" | "rose" | "slate";
 type Note = {
-  id: string;
+  id: number;
   title: string;
-  preview: string;
-  folder: FolderId;
-  color: NoteColor;
+  body: string;
+  content: Record<string, unknown> | null;
+  folder: Folder;
+  color: Color;
   tags: string[];
-  date: string;
-  edited: string;
-  pinned: boolean;
-  body: string[];
-  checklist?: { heading: string; items: ChecklistItem[] };
+  is_pinned: boolean;
+  is_archived: boolean;
+  updated_at: string;
 };
-
-const colorMeta: Record<
-  NoteColor,
-  { dot: string; badge: string; bar: string; label: string }
-> = {
-  blue: {
-    dot: "bg-blue-500",
-    badge: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    bar: "bg-blue-500",
-    label: "Blue",
-  },
-  violet: {
-    dot: "bg-violet-500",
-    badge: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
-    bar: "bg-violet-500",
-    label: "Violet",
-  },
-  emerald: {
-    dot: "bg-emerald-500",
-    badge: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    bar: "bg-emerald-500",
-    label: "Green",
-  },
-  amber: {
-    dot: "bg-amber-500",
-    badge: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    bar: "bg-amber-500",
-    label: "Amber",
-  },
-  rose: {
-    dot: "bg-rose-500",
-    badge: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-    bar: "bg-rose-500",
-    label: "Rose",
-  },
-  slate: {
-    dot: "bg-slate-500",
-    badge: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
-    bar: "bg-slate-500",
-    label: "Slate",
-  },
-};
-
+type Filter = "all" | Folder;
 const folders = [
-  { id: "all", label: "All Notes", icon: IconNotes },
+  { id: "all", label: "All notes", icon: IconNotes },
   { id: "work", label: "Work", icon: IconBriefcase },
   { id: "personal", label: "Personal", icon: IconUser },
   { id: "ideas", label: "Ideas", icon: IconBulb },
   { id: "archive", label: "Archive", icon: IconArchive },
 ] as const;
-
-type NavId = (typeof folders)[number]["id"];
-
-const seedNotes: Note[] = [
-  {
-    id: "n1",
-    title: "Q3 Product Roadmap",
-    preview:
-      "Three bets for the quarter: onboarding, the analytics suite, and a billing refresh. Ship the checklist first.",
-    folder: "work",
-    color: "blue",
-    tags: ["roadmap", "planning"],
-    date: "Jul 15",
-    edited: "Edited Jul 15, 2026 · 2:14 PM",
-    pinned: true,
-    body: [
-      "We're placing three bets this quarter. Each one should be measurable by the end of September, and every team lead owns a clear slice of the work.",
-      "Onboarding is the biggest lever — week-1 activation has been flat for two quarters. If the new checklist and product tour move it even five points, everything downstream improves.",
-      "Analytics is the differentiator our largest accounts keep asking for. Billing v2 unblocks metered pricing, which unlocks the enterprise motion.",
-    ],
-    checklist: {
-      heading: "Before the leadership sync",
-      items: [
-        { id: "c1", text: "Draft activation funnel dashboard", done: true },
-        { id: "c2", text: "Confirm billing migration timeline", done: true },
-        { id: "c3", text: "Align pricing with finance", done: false },
-        { id: "c4", text: "Share doc for async comments", done: false },
-      ],
+const colors: Record<Color, { dot: string; bar: string }> = {
+  blue: { dot: "bg-blue-500", bar: "bg-blue-500" },
+  violet: { dot: "bg-violet-500", bar: "bg-violet-500" },
+  emerald: { dot: "bg-emerald-500", bar: "bg-emerald-500" },
+  amber: { dot: "bg-amber-500", bar: "bg-amber-500" },
+  rose: { dot: "bg-rose-500", bar: "bg-rose-500" },
+  slate: { dot: "bg-slate-500", bar: "bg-slate-500" },
+};
+const colorChoices = Object.keys(colors) as Color[];
+const preview = (note: Note) =>
+  note.body.trim().replace(/\s+/g, " ").slice(0, 120) ||
+  "Empty note — start writing.";
+const date = (value: string) =>
+  new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+const extractTags = (value: string) =>
+  [...value.matchAll(/(?:^|[\s(])#([\p{L}\p{N}_-]+)/gu)].reduce<string[]>(
+    (items, match) => {
+      const tag = match[1];
+      return items.some((item) => item.toLocaleLowerCase() === tag.toLocaleLowerCase())
+        ? items
+        : [...items, tag];
     },
-  },
-  {
-    id: "n2",
-    title: "Launch checklist — Mobile App v2",
-    preview:
-      "Everything that has to be green before we flip the flag. App Store review is the long pole.",
-    folder: "work",
-    color: "emerald",
-    tags: ["launch", "mobile"],
-    date: "Jul 14",
-    edited: "Edited Jul 14, 2026 · 6:02 PM",
-    pinned: true,
-    body: [
-      "Target date is the 28th. App Store review is the long pole, so the build has to be submitted no later than the 22nd to leave buffer for a re-review.",
-      "Marketing has the announcement drafted; we just need the final screenshots once the empty states land.",
-    ],
-    checklist: {
-      heading: "Ship gate",
-      items: [
-        { id: "c1", text: "Crash-free rate above 99.5%", done: true },
-        { id: "c2", text: "Offline mode QA on iOS + Android", done: true },
-        { id: "c3", text: "Submit build for App Store review", done: false },
-        { id: "c4", text: "Schedule staged rollout (10% → 100%)", done: false },
-        { id: "c5", text: "Update help center articles", done: false },
-      ],
-    },
-  },
-  {
-    id: "n3",
-    title: "1:1 with Priya — design system",
-    preview:
-      "Priya wants to consolidate the icon set and kill the one-off spacing tokens. Agreed to spike it next sprint.",
-    folder: "work",
-    color: "violet",
-    tags: ["design", "1:1"],
-    date: "Jul 12",
-    edited: "Edited Jul 12, 2026 · 11:30 AM",
-    pinned: false,
-    body: [
-      "Priya raised that we're carrying two icon libraries and a pile of one-off spacing values. It's slowing every new screen down and creating subtle inconsistencies in dark mode.",
-      "We agreed to spike a consolidation next sprint: pick one icon set, codify the spacing scale, and document both in Storybook. She'll pair with Emma on the audit.",
-      "Follow-up: get Marcus's read on the migration cost for the older Android views.",
-    ],
-  },
-  {
-    id: "n4",
-    title: "Weekend in Kyoto",
-    preview:
-      "Rough itinerary for the trip — temples in the morning, food in the evening, and one full day in Arashiyama.",
-    folder: "personal",
-    color: "rose",
-    tags: ["travel", "japan"],
-    date: "Jul 9",
-    edited: "Edited Jul 9, 2026 · 9:48 PM",
-    pinned: false,
-    body: [
-      "Keep the mornings for temples before the crowds arrive, then use the afternoons for wandering and coffee. Evenings are for food — Nishiki Market and Pontocho alley.",
-      "Save a whole day for Arashiyama: the bamboo grove first thing, then the monkey park and a slow lunch by the river.",
-    ],
-    checklist: {
-      heading: "To book",
-      items: [
-        { id: "c1", text: "Ryokan for two nights in Gion", done: true },
-        { id: "c2", text: "JR Pass (7-day)", done: false },
-        { id: "c3", text: "Dinner reservation — kaiseki", done: false },
-      ],
-    },
-  },
-  {
-    id: "n5",
-    title: "Reading list",
-    preview:
-      "Books queued up for the rest of the year. Trying to alternate one fiction, one non-fiction.",
-    folder: "personal",
-    color: "amber",
-    tags: ["books"],
-    date: "Jul 6",
-    edited: "Edited Jul 6, 2026 · 8:15 AM",
-    pinned: false,
-    body: [
-      "The plan is simple: alternate one novel with one non-fiction so it never feels like homework. If a book isn't landing by page fifty, put it down guilt-free.",
-    ],
-    checklist: {
-      heading: "Queue",
-      items: [
-        { id: "c1", text: "The Overstory — Richard Powers", done: true },
-        { id: "c2", text: "Thinking in Systems — Donella Meadows", done: false },
-        { id: "c3", text: "Piranesi — Susanna Clarke", done: false },
-        { id: "c4", text: "The Design of Everyday Things", done: false },
-      ],
-    },
-  },
-  {
-    id: "n6",
-    title: "App idea: a calmer focus timer",
-    preview:
-      "Not another Pomodoro clone. Ambient soundscapes, gentle session ramps, and zero streak guilt.",
-    folder: "ideas",
-    color: "violet",
-    tags: ["side-project", "product"],
-    date: "Jul 4",
-    edited: "Edited Jul 4, 2026 · 10:22 PM",
-    pinned: false,
-    body: [
-      "Most focus apps punish you with streaks and harsh timers. The opposite bet: a timer that eases you in, fades the UI away, and never guilt-trips a missed day.",
-      "Core loop is a single tap to start, a soft chime to end, and a quiet weekly reflection. Everything else is optional. If it can't be explained in one sentence, it doesn't ship.",
-    ],
-  },
-  {
-    id: "n7",
-    title: "Blog post drafts",
-    preview:
-      "Half-formed titles for the engineering blog. The dark-mode one is closest to ready.",
-    folder: "ideas",
-    color: "blue",
-    tags: ["writing", "engineering"],
-    date: "Jul 1",
-    edited: "Edited Jul 1, 2026 · 4:41 PM",
-    pinned: false,
-    body: [
-      "A few post ideas worth developing. The dark-mode piece is closest to ready — I've already got the before/after screenshots and the token table.",
-    ],
-    checklist: {
-      heading: "Candidate titles",
-      items: [
-        { id: "c1", text: "Designing dark mode that actually reads well", done: false },
-        { id: "c2", text: "How we cut cold-start bundle size in half", done: false },
-        { id: "c3", text: "A pragmatic guide to feature flags", done: false },
-      ],
-    },
-  },
-  {
-    id: "n8",
-    title: "Old sprint retro notes",
-    preview:
-      "Archived retro from the Q1 billing work. Keeping it for the action items we never closed.",
-    folder: "archive",
-    color: "slate",
-    tags: ["retro"],
-    date: "Mar 28",
-    edited: "Edited Mar 28, 2026 · 3:05 PM",
-    pinned: false,
-    body: [
-      "Retro from the Q1 billing sprint. Worth keeping because a couple of the action items are still open and keep resurfacing.",
-      "What went well: the migration ran without downtime. What didn't: we underestimated webhook retries and lost two days to flaky tests.",
-    ],
-  },
-];
-
-const colorChoices: NoteColor[] = [
-  "blue",
-  "violet",
-  "emerald",
-  "amber",
-  "rose",
-  "slate",
-];
+    [],
+  );
 
 export default function NotesPage() {
-  const [notes, setNotes] = useState<Note[]>(seedNotes);
-  const [folder, setFolder] = useState<NavId>("all");
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string>(seedNotes[0].id);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  // Mobile master-detail: show the notes list first, the editor after tapping one.
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
-
-  // New-note dialog state.
-  const [composeOpen, setComposeOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newFolder, setNewFolder] = useState<FolderId>("work");
-  const [newBody, setNewBody] = useState("");
-
-  function createNote() {
-    const t = newTitle.trim() || "Untitled note";
-    const bodyText = newBody.trim();
-    const now = new Date();
-    const note: Note = {
-      id: `n-${Date.now()}`,
-      title: t,
-      preview: bodyText ? bodyText.slice(0, 120) : "Empty note — start writing…",
-      folder: newFolder,
-      color: "blue",
-      tags: [],
-      date: now.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      edited: `Edited ${now.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })} · just now`,
-      pinned: false,
-      body: bodyText
-        ? bodyText.split("\n\n").map((p) => p.trim()).filter(Boolean)
-        : ["Start writing your note here…"],
-    };
-    setNotes((prev) => [note, ...prev]);
-    setSelectedId(note.id);
-    setFolder(newFolder);
-    setComposeOpen(false);
-    setNewTitle("");
-    setNewBody("");
-    setNewFolder("work");
-    toast.success("Note created", { description: t });
-  }
-
-  function archiveNote(id: string) {
-    setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, folder: "archive" } : n)),
-    );
-    toast.success("Note archived");
-  }
-
-  function shareNote(note: Note) {
-    const link = `https://orbynadmin.com/notes/${note.id}`;
-    navigator.clipboard
-      ?.writeText(link)
-      .then(() => toast.success("Link copied", { description: link }))
-      .catch(() => toast.error("Couldn't copy link"));
-  }
-
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [mobile, setMobile] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await fetch("/api/notes", { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail);
+        const items = Array.isArray(data) ? data : (data.results ?? []);
+        setNotes(items);
+        setSelectedId(items[0]?.id ?? null);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Could not load notes.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+  const selected = notes.find((note) => note.id === selectedId) ?? null;
   const counts = useMemo(() => {
-    const base = { all: 0, work: 0, personal: 0, ideas: 0, archive: 0 };
-    for (const n of notes) {
-      base[n.folder] += 1;
-      if (n.folder !== "archive") base.all += 1;
-    }
-    return base;
+    const next: Record<Filter, number> = {
+      all: 0,
+      work: 0,
+      personal: 0,
+      ideas: 0,
+      archive: 0,
+    };
+    notes.forEach((note) => {
+      next[note.folder] += 1;
+      if (!note.is_archived && note.folder !== "archive") next.all += 1;
+    });
+    return next;
   }, [notes]);
-
-  const visible = useMemo(() => {
-    let list = notes.filter((n) =>
-      folder === "all" ? n.folder !== "archive" : n.folder === folder,
+  const visible = useMemo(
+    () =>
+      notes
+        .filter((note) => {
+          const inFolder =
+            filter === "all"
+              ? !note.is_archived && note.folder !== "archive"
+              : note.folder === filter;
+          return (
+            inFolder &&
+            [note.title, note.body, ...note.tags]
+              .join(" ")
+              .toLowerCase()
+              .includes(query.toLowerCase())
+          );
+        })
+        .sort(
+          (left, right) =>
+            Number(right.is_pinned) - Number(left.is_pinned) ||
+            new Date(right.updated_at).getTime() -
+              new Date(left.updated_at).getTime(),
+        ),
+    [notes, filter, query],
+  );
+  const tags = useMemo(
+    () => [...new Set(notes.flatMap((note) => note.tags))].slice(0, 10),
+    [notes],
+  );
+  const local = (id: number, patch: Partial<Note>) => {
+    setDirty(true);
+    setNotes((items) =>
+      items.map((note) => (note.id === id ? { ...note, ...patch } : note)),
     );
-    if (query) {
-      const q = query.toLowerCase();
-      list = list.filter(
-        (n) =>
-          n.title.toLowerCase().includes(q) ||
-          n.preview.toLowerCase().includes(q) ||
-          n.tags.some((t) => t.toLowerCase().includes(q)),
+  };
+  async function save(id: number, patch: Partial<Note>, message?: string) {
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/notes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail);
+      setNotes((items) => items.map((note) => (note.id === id ? data : note)));
+      setDirty(false);
+      if (message) toast.success(message);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not save note.",
       );
+    } finally {
+      setSaving(false);
     }
-    return list.slice().sort((a, b) => {
-      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-      return 0;
-    });
-  }, [notes, folder, query]);
-
-  const selected = notes.find((n) => n.id === selectedId) ?? visible[0] ?? null;
-
-  function togglePin(id: string) {
-    setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)),
-    );
   }
-
-  function setColor(id: string, color: NoteColor) {
-    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, color } : n)));
+  async function create() {
+    setCreating(true);
+    try {
+      const response = await fetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Untitled note",
+          body: "",
+          content: { type: "doc", content: [{ type: "paragraph" }] },
+          folder: "work",
+          color: "blue",
+          tags: [],
+        }),
+      });
+      const note = await response.json();
+      if (!response.ok) throw new Error(note.detail);
+      setNotes((items) => [note, ...items]);
+      setSelectedId(note.id);
+      setFilter("work");
+      setMobile(true);
+      requestAnimationFrame(() =>
+        document.getElementById("note-title")?.focus(),
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not create note.",
+      );
+    } finally {
+      setCreating(false);
+    }
   }
-
-  function toggleCheck(noteId: string, itemId: string) {
-    setNotes((prev) =>
-      prev.map((n) =>
-        n.id === noteId && n.checklist
-          ? {
-              ...n,
-              checklist: {
-                ...n.checklist,
-                items: n.checklist.items.map((it) =>
-                  it.id === itemId ? { ...it, done: !it.done } : it,
-                ),
-              },
-            }
-          : n,
-      ),
-    );
+  async function remove() {
+    if (!selected) return;
+    try {
+      const response = await fetch(`/api/notes/${selected.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error();
+      const remaining = notes.filter((note) => note.id !== selected.id);
+      setNotes(remaining);
+      setSelectedId(remaining[0]?.id ?? null);
+      setConfirmDelete(false);
+      toast.success("Note deleted");
+    } catch {
+      toast.error("Could not delete note.");
+    }
   }
-
-  function deleteNote(id: string) {
-    setNotes((prev) => {
-      const next = prev.filter((n) => n.id !== id);
-      if (id === selectedId && next.length) setSelectedId(next[0].id);
-      return next;
-    });
-  }
-
-  const tagCloud = useMemo(() => {
-    const set = new Set<string>();
-    for (const n of notes) n.tags.forEach((t) => set.add(t));
-    return Array.from(set).slice(0, 8);
-  }, [notes]);
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Notes</h1>
         <p className="text-sm text-muted-foreground">
-          Capture ideas, plans and checklists — all in one place.
+          Your private writing space.
         </p>
       </div>
-
-      <Card className="grid h-[calc(100vh-11rem)] grid-cols-1 overflow-hidden p-0 md:grid-cols-[220px_320px_1fr]">
-        {/* LEFT: folders + tags */}
-        <div className="hidden flex-col gap-4 border-r p-4 lg:flex">
-          <Button className="w-full gap-2" onClick={() => setComposeOpen(true)}>
+      <Card
+        className={cn(
+          "grid h-[calc(100vh-11rem)] grid-cols-1 overflow-hidden p-0",
+          sidebarCollapsed
+            ? "lg:grid-cols-[48px_260px_minmax(0,1fr)]"
+            : "lg:grid-cols-[180px_260px_minmax(0,1fr)]",
+        )}
+      >
+        <aside
+          className={cn(
+            "hidden flex-col gap-4 border-r p-4 lg:flex",
+            sidebarCollapsed && "items-center p-1.5",
+          )}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(sidebarCollapsed ? "" : "self-end")}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setSidebarCollapsed((value) => !value)}
+          >
+            {sidebarCollapsed ? (
+              <IconChevronRight className="size-4" />
+            ) : (
+              <IconChevronLeft className="size-4" />
+            )}
+          </Button>
+          {!sidebarCollapsed && (
+            <>
+          <Button
+            className="w-full gap-2"
+            disabled={creating}
+            onClick={() => void create()}
+          >
             <IconPlus className="size-4" /> New note
           </Button>
-
-          <nav className="flex flex-col gap-0.5">
-            {folders.map((f) => (
+          <nav className="space-y-0.5">
+            {folders.map((item) => (
               <button
-                key={f.id}
-                onClick={() => setFolder(f.id)}
+                key={item.id}
+                onClick={() => setFilter(item.id)}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted/60",
-                  folder === f.id
-                    ? "bg-muted font-medium text-foreground"
-                    : "text-muted-foreground",
+                  "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm",
+                  item.id === filter
+                    ? "bg-muted font-medium"
+                    : "text-muted-foreground hover:bg-muted/60",
                 )}
               >
-                <f.icon className="size-4" />
-                <span className="flex-1 text-left">{f.label}</span>
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {counts[f.id]}
-                </span>
+                <item.icon className="size-4" />
+                <span className="flex-1 text-left">{item.label}</span>
+                <span className="text-xs">{counts[item.id]}</span>
               </button>
             ))}
           </nav>
-
           <Separator />
-
           <div className="space-y-2">
             <p className="flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
               <IconTag className="size-3.5" /> Tags
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {tagCloud.map((t) => (
+              {tags.map((tag) => (
                 <button
-                  key={t}
-                  onClick={() => setQuery(t)}
-                  className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted"
+                  key={tag}
+                  onClick={() => setQuery(tag)}
+                  className="rounded-full border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
                 >
-                  #{t}
+                  #{tag}
                 </button>
               ))}
             </div>
           </div>
-        </div>
-
-        {/* MIDDLE: note list */}
-        <div
+            </>
+          )}
+        </aside>
+        <section
           className={cn(
             "min-w-0 flex-col border-r md:flex",
-            mobileDetailOpen ? "hidden" : "flex",
+            mobile ? "hidden" : "flex",
           )}
         >
-          <div className="flex items-center gap-2 border-b p-3">
+          <div className="flex gap-2 border-b p-3">
             <div className="relative flex-1">
               <IconSearch className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search notes"
                 className="pl-9"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search notes"
               />
             </div>
             <Button
               size="icon"
-              className="shrink-0 md:hidden"
-              onClick={() => setComposeOpen(true)}
-              aria-label="New note"
+              className="md:hidden"
+              onClick={() => void create()}
             >
               <IconPlus className="size-4" />
             </Button>
           </div>
           <ScrollArea className="flex-1">
             <div className="divide-y">
-              {visible.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => {
-                    setSelectedId(n.id);
-                    setMobileDetailOpen(true);
-                  }}
-                  className={cn(
-                    "flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors hover:bg-muted/40",
-                    n.id === selected?.id && "bg-muted/60",
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "size-2 shrink-0 rounded-full",
-                        colorMeta[n.color].dot,
-                      )}
-                    />
-                    <span className="flex-1 truncate text-sm font-medium">
-                      {n.title}
-                    </span>
-                    {n.pinned && (
-                      <IconPinnedFilled className="size-3.5 shrink-0 text-amber-500" />
+              {loading ? (
+                <p className="p-6 text-sm text-muted-foreground">Loading…</p>
+              ) : (
+                visible.map((note) => (
+                  <button
+                    key={note.id}
+                    onClick={() => {
+                      setSelectedId(note.id);
+                      setMobile(true);
+                    }}
+                    className={cn(
+                      "flex w-full flex-col gap-1 px-4 py-3 text-left hover:bg-muted/40",
+                      note.id === selected?.id && "bg-muted/60",
                     )}
-                  </div>
-                  <p className="line-clamp-2 pl-4 text-xs text-muted-foreground">
-                    {n.preview}
-                  </p>
-                  <span className="pl-4 text-[11px] text-muted-foreground tabular-nums">
-                    {n.date}
-                  </span>
-                </button>
-              ))}
-              {visible.length === 0 && (
-                <div className="p-8 text-center text-sm text-muted-foreground">
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "size-2 rounded-full",
+                          colors[note.color].dot,
+                        )}
+                      />
+                      <span className="flex-1 truncate text-sm font-medium">
+                        {note.title}
+                      </span>
+                      {note.is_pinned && (
+                        <IconPinnedFilled className="size-3.5 text-amber-500" />
+                      )}
+                    </div>
+                    <p className="line-clamp-2 pl-4 text-xs text-muted-foreground">
+                      {preview(note)}
+                    </p>
+                    <span className="pl-4 text-[11px] text-muted-foreground">
+                      {date(note.updated_at)}
+                    </span>
+                  </button>
+                ))
+              )}
+              {!loading && !visible.length && (
+                <p className="p-8 text-center text-sm text-muted-foreground">
                   No notes found.
-                </div>
+                </p>
               )}
             </div>
           </ScrollArea>
-        </div>
-
-        {/* RIGHT: reader / editor */}
-        <div
-          className={cn(
-            "min-w-0 flex-col md:flex",
-            mobileDetailOpen ? "flex" : "hidden",
-          )}
+        </section>
+        <section
+          className={cn("min-w-0 flex-col md:flex", mobile ? "flex" : "hidden")}
         >
           {selected ? (
             <>
-              {/* Toolbar */}
               <div className="flex items-center gap-1 border-b p-3">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="-ml-1 mr-0.5 shrink-0 md:hidden"
-                  onClick={() => setMobileDetailOpen(false)}
-                  aria-label="Back to notes"
+                  className="md:hidden"
+                  onClick={() => setMobile(false)}
                 >
                   <IconArrowLeft className="size-5" />
                 </Button>
                 <span
                   className={cn(
-                    "mr-1 h-5 w-1 rounded-full",
-                    colorMeta[selected.color].bar,
+                    "h-5 w-1 rounded-full",
+                    colors[selected.color].bar,
                   )}
                 />
-                <span className="text-xs text-muted-foreground">
-                  {folders.find((f) => f.id === selected.folder)?.label ??
-                    "Notes"}
-                </span>
+                <Select
+                  value={selected.folder}
+                  onValueChange={(folder) =>
+                    local(selected.id, { folder: folder as Folder })
+                  }
+                >
+                  <SelectTrigger
+                    aria-label="Move this note to a category"
+                    className="ml-2 h-7 w-[164px] border-0 bg-transparent px-2 text-xs shadow-none focus:ring-0"
+                  >
+                    <span className="mr-1 text-muted-foreground">Move to:</span>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {folders
+                      .filter((folder) => folder.id !== "all")
+                      .map((folder) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          {folder.label}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
                 <div className="ml-auto flex items-center gap-1">
+                  <span className="mr-2 text-xs text-muted-foreground">
+                    {saving ? "Saving…" : dirty ? "Unsaved changes" : "Saved"}
+                  </span>
+                  <Button
+                    size="sm"
+                    disabled={saving || !dirty}
+                    onClick={() =>
+                      void save(selected.id, {
+                        title: selected.title || "Untitled note",
+                        body: selected.body,
+                        content: selected.content ?? {
+                          type: "doc",
+                          content: [{ type: "paragraph" }],
+                        },
+                        folder: selected.folder,
+                        tags: selected.tags,
+                      })
+                    }
+                  >
+                    Save
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => togglePin(selected.id)}
-                    aria-label={selected.pinned ? "Unpin" : "Pin"}
+                    onClick={() =>
+                      void save(selected.id, { is_pinned: !selected.is_pinned })
+                    }
                   >
-                    {selected.pinned ? (
+                    {selected.is_pinned ? (
                       <IconPinnedFilled className="size-4 text-amber-500" />
                     ) : (
                       <IconPin className="size-4" />
                     )}
                   </Button>
-
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label="Note color">
+                      <Button variant="ghost" size="icon">
                         <IconPalette className="size-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuLabel>Color</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <div className="grid grid-cols-6 gap-1.5 p-1.5">
-                        {colorChoices.map((c) => (
+                    <DropdownMenuContent align="end">
+                      <div className="grid grid-cols-6 gap-2 p-2">
+                        {colorChoices.map((color) => (
                           <button
-                            key={c}
-                            onClick={() => setColor(selected.id, c)}
-                            aria-label={colorMeta[c].label}
+                            key={color}
                             className={cn(
-                              "size-5 rounded-full ring-offset-2 ring-offset-popover transition-shadow hover:ring-2 hover:ring-ring",
-                              colorMeta[c].dot,
-                              selected.color === c && "ring-2 ring-ring",
+                              "size-5 rounded-full",
+                              colors[color].dot,
                             )}
+                            onClick={() => void save(selected.id, { color })}
                           />
                         ))}
                       </div>
                     </DropdownMenuContent>
                   </DropdownMenu>
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Share"
-                    onClick={() => shareNote(selected)}
-                  >
-                    <IconShare3 className="size-4" />
-                  </Button>
-
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label="More">
+                      <Button variant="ghost" size="icon">
                         <IconDots className="size-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem onClick={() => togglePin(selected.id)}>
-                        <IconPin className="size-4" />
-                        {selected.pinned ? "Unpin note" : "Pin note"}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => archiveNote(selected.id)}>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() =>
+                          void save(
+                            selected.id,
+                            { folder: "archive", is_archived: true },
+                            "Note archived",
+                          )
+                        }
+                      >
                         <IconArchive className="size-4" /> Archive
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
-                        onClick={() => setDeleteOpen(true)}
+                        onClick={() => setConfirmDelete(true)}
                       >
                         <IconTrash className="size-4" /> Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-
-                  <Separator
-                    orientation="vertical"
-                    className="mx-1 hidden h-5 md:block"
-                  />
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="hidden md:inline-flex"
-                    onClick={() => setDeleteOpen(true)}
-                    aria-label="Delete note"
-                  >
-                    <IconTrash className="size-4" />
-                  </Button>
                 </div>
               </div>
-
               <ScrollArea className="flex-1">
-                <div className="mx-auto max-w-2xl space-y-5 p-6 md:p-8">
-                  <h2 className="text-2xl font-semibold tracking-tight">
-                    {selected.title}
-                  </h2>
-
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <IconClock className="size-3.5" /> {selected.edited}
-                    </span>
-                    <span className="tabular-nums">
-                      {wordCount(selected)} words
-                    </span>
-                  </div>
-
+                <div className="mx-auto w-full max-w-5xl space-y-5 px-6 py-8 md:px-12">
+                  <Input
+                    id="note-title"
+                    value={selected.title}
+                    onChange={(event) =>
+                      local(selected.id, { title: event.target.value })
+                    }
+                    className="h-auto border-0 px-0 text-3xl font-semibold shadow-none focus-visible:ring-0"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {selected.body.trim()
+                      ? selected.body.trim().split(/\s+/).length
+                      : 0}{" "}
+                    words · Edited {date(selected.updated_at)}
+                  </p>
                   <Separator />
-
-                  <div className="space-y-4">
-                    {selected.body.map((p, i) => (
-                      <p
-                        key={i}
-                        className="text-sm leading-relaxed text-foreground/90"
-                      >
-                        {p}
-                      </p>
-                    ))}
-                  </div>
-
-                  {selected.checklist && (
-                    <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
-                      <p className="text-sm font-medium">
-                        {selected.checklist.heading}
-                      </p>
-                      <ul className="space-y-1.5">
-                        {selected.checklist.items.map((it) => (
-                          <li key={it.id}>
-                            <button
-                              onClick={() => toggleCheck(selected.id, it.id)}
-                              className="flex w-full items-center gap-2.5 text-left text-sm"
-                            >
-                              {it.done ? (
-                                <IconSquareCheck className="size-4 shrink-0 text-primary" />
-                              ) : (
-                                <IconSquare className="size-4 shrink-0 text-muted-foreground" />
-                              )}
-                              <span
-                                className={cn(
-                                  it.done &&
-                                    "text-muted-foreground line-through",
-                                )}
-                              >
-                                {it.text}
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
+                  <NoteEditor
+                    content={selected.content}
+                    onChange={(content, body) =>
+                      local(selected.id, {
+                        content,
+                        body,
+                        tags: extractTags(body),
+                      })
+                    }
+                  />
+                  <Separator />
+                  {selected.tags.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selected.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary">
+                          #{tag}
+                        </Badge>
+                      ))}
                     </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Add tags in the text with #hashtag.
+                    </p>
                   )}
-
-                  <Separator />
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {selected.tags.map((t) => (
-                      <Badge
-                        key={t}
-                        variant="secondary"
-                        className={colorMeta[selected.color].badge}
-                      >
-                        #{t}
-                      </Badge>
-                    ))}
-                  </div>
                 </div>
               </ScrollArea>
             </>
           ) : (
-            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-              Select a note to read
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+              <IconNotes className="size-8" />
+              <span>Create a note to start writing.</span>
+              <Button onClick={() => void create()}>
+                <IconPlus className="size-4" /> New note
+              </Button>
             </div>
           )}
-        </div>
+        </section>
       </Card>
-
       {selected && (
         <DeleteDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
           name={selected.title}
-          description="This note will be permanently deleted. This action cannot be undone."
-          onConfirm={() => deleteNote(selected.id)}
+          description="This note will be permanently deleted."
+          onConfirm={remove}
         />
       )}
-
-      <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New note</DialogTitle>
-            <DialogDescription>Capture a fresh idea or plan.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="note-title">Title</Label>
-              <Input
-                id="note-title"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Untitled note"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="note-body">Note</Label>
-              <Textarea
-                id="note-body"
-                value={newBody}
-                onChange={(e) => setNewBody(e.target.value)}
-                placeholder="Start writing…"
-                rows={5}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Folder</Label>
-              <Select
-                value={newFolder}
-                onValueChange={(v) => setNewFolder(v as FolderId)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {folders
-                    .filter((f) => f.id !== "all")
-                    .map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.label}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setComposeOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={createNote}>Create note</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
-}
-
-function wordCount(note: Note) {
-  const bodyWords = note.body.join(" ").trim().split(/\s+/).length;
-  const listWords = note.checklist
-    ? note.checklist.items.reduce(
-        (sum, it) => sum + it.text.trim().split(/\s+/).length,
-        0,
-      )
-    : 0;
-  return bodyWords + listWords;
 }

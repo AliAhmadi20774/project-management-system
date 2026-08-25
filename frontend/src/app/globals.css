@@ -164,6 +164,27 @@
   display: none;
 }
 
+/* Tiptap note editor: document direction is automatic, but paragraph-level
+   RTL/LTR overrides are also available from the editor toolbar. */
+.note-prosemirror {
+  color: var(--foreground);
+  font-family: Vazirmatn, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.85;
+}
+.note-prosemirror > * + * { margin-top: 0.9rem; }
+.note-prosemirror h1 { font-size: 1.875rem; font-weight: 650; line-height: 1.25; }
+.note-prosemirror h2 { font-size: 1.5rem; font-weight: 650; line-height: 1.3; }
+.note-prosemirror ul, .note-prosemirror ol { padding-inline-start: 1.5rem; }
+.note-prosemirror ul { list-style: disc; }
+.note-prosemirror ol { list-style: decimal; }
+.note-prosemirror blockquote { border-inline-start: 3px solid var(--border); color: var(--muted-foreground); padding-inline-start: 1rem; }
+.note-prosemirror pre { overflow-x: auto; border-radius: 0.5rem; background: var(--muted); padding: 0.875rem; }
+.note-prosemirror a { color: var(--primary); text-decoration: underline; }
+.note-prosemirror [data-type="taskList"] { list-style: none; padding-inline-start: 0; }
+.note-prosemirror [data-type="taskItem"] { display: flex; gap: 0.5rem; align-items: flex-start; }
+.note-prosemirror [data-type="taskItem"] > label { margin-top: 0.35rem; }
+
 /* iOS Safari (and other touch browsers) auto-zoom the page whenever a form
    field with font-size < 16px receives focus. Pin every text-entry control to
    16px on touch devices so tapping an input never zooms. Desktop (fine pointer)
