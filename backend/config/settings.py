@@ -43,9 +43,13 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'channels',
     'organizations',
     'accounts',
     'projects',
+    'notes',
+    'contacts',
+    'chat',
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -94,6 +98,17 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        # channels_redis blocks up to five seconds while awaiting a message.
+        # Redis 7 defaults its client socket timeout to five seconds too, which
+        # can race that block and disconnect an otherwise healthy WebSocket.
+        'CONFIG': {'hosts': [{'address': os.environ.get('REDIS_URL', 'redis://redis:6379/0'), 'socket_timeout': 15, 'socket_connect_timeout': 5}]},
+    },
+}
 
 
 # Database

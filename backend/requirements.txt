@@ -3,3 +3,5 @@ psycopg[binary]==3.3.3
 djangorestframework>=3.16,<4
 djangorestframework-simplejwt>=5.5,<6
 Pillow>=11,<12
+channels[daphne]>=4.2,<5
+channels-redis>=4.2,<5

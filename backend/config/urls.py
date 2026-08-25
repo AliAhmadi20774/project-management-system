@@ -25,6 +25,9 @@ urlpatterns = [
     path('api/v1/accounts/', include('accounts.urls')),
     path('api/v1/organizations/', include('organizations.urls')),
     path('api/v1/', include('projects.urls')),
+    path('api/v1/', include('notes.urls')),
+    path('api/v1/', include('contacts.urls')),
+    path('api/v1/', include('chat.urls')),
     path('api/v1/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]

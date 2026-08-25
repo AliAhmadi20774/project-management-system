@@ -13,9 +13,15 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+
   api:
     build: ./backend
-    command: python manage.py runserver 0.0.0.0:8000
+    command: daphne -b 0.0.0.0 -p 8000 config.asgi:application
     volumes:
       - ./backend:/app
     ports:
@@ -26,9 +32,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-project_password}
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   ui:
     image: node:22-alpine
@@ -37,6 +46,7 @@ services:
     environment:
       API_INTERNAL_URL: http://api:8000
       WATCHPACK_POLLING: "true"
+      NODE_OPTIONS: --max-old-space-size=2048
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
@@ -51,4 +61,5 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   frontend_node_modules:
