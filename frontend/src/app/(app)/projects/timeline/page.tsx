@@ -90,6 +90,7 @@ function ProjectEditDialog({ project, onClose, onSaved }: {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!form) return;
     if (!form.name.trim() || !form.code.trim()) return toast.error("Project name and code are required.");
     if (form.start && form.due && form.due < form.start) return toast.error("Due date must be on or after the start date.");
     setSaving(true);

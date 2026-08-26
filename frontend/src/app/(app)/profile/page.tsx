@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   IconMapPin,
@@ -63,7 +63,7 @@ const socials = [
   { label: "Dribbble", handle: "alexmorgan", icon: IconBrandDribbble, href: "#" },
 ];
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const [profileOverride, setProfileOverride] = useState<AuthUser | null>(null);
@@ -338,5 +338,13 @@ export default function ProfilePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading profile…</div>}>
+      <ProfilePageContent />
+    </Suspense>
   );
 }

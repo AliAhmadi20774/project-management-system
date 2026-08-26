@@ -1242,7 +1242,7 @@ export function ProjectDetail({
     };
   }, [seedProject]);
 
-  const project = liveProject;
+  const project = liveProject ?? seedProject;
 
   function openAddTask(status: TaskStatus, statusLocked = false) {
     if (!membersLoaded) {
@@ -1255,6 +1255,10 @@ export function ProjectDetail({
   }
 
   async function createTask(input: NewTaskInput) {
+    if (!project) {
+      toast.error("Project is still loading.");
+      return;
+    }
     const backendProjectId = getBackendProjectId(project.id);
     if (!backendProjectId) {
       toast.error("This project is not connected to the API.");

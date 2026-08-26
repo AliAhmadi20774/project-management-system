@@ -1413,7 +1413,7 @@ function GanttView({
   ) => Promise<void>;
   onReviewProgress: (task: Task, approved: boolean) => Promise<void>;
 }) {
-  const [todayMs, setTodayMs] = useState(WINDOW_START);
+  const [todayMs, setTodayMs] = useState(() => Date.now());
 
   useEffect(() => {
     const refreshToday = () => setTodayMs(Date.now());
@@ -1433,15 +1433,63 @@ function GanttView({
     [tasks],
   );
 
+  // Build the scale from the actual task dates. The previous fixed Jul–Sep
+  // window clipped tasks outside that range (and made a task ending in 2027
+  // appear to end in September). Month boundaries keep the header readable
+  // while the bars always represent the full task interval.
+  const range = useMemo(() => {
+    const dated = rows
+      .map((task) => ({ start: isoToMs(task.start), due: isoToMs(task.due) }))
+      .filter(({ start, due }) => Number.isFinite(start) && Number.isFinite(due));
+    const projectStart = isoToMs(project.start);
+    const projectDue = isoToMs(project.due);
+    const starts = dated.map(({ start }) => start);
+    const dues = dated.map(({ due }) => due);
+    if (Number.isFinite(projectStart)) starts.push(projectStart);
+    if (Number.isFinite(projectDue)) dues.push(projectDue);
+    const minDate = starts.length ? Math.min(...starts) : Date.now();
+    const maxDate = dues.length ? Math.max(...dues) : minDate;
+    const startDate = new Date(minDate);
+    startDate.setUTCDate(1);
+    startDate.setUTCHours(0, 0, 0, 0);
+    const endDate = new Date(maxDate);
+    endDate.setUTCMonth(endDate.getUTCMonth() + 1, 1);
+    endDate.setUTCHours(0, 0, 0, 0);
+    if (endDate.getTime() <= startDate.getTime()) endDate.setUTCMonth(endDate.getUTCMonth() + 1);
+    const start = startDate.getTime();
+    const end = endDate.getTime();
+    const span = end - start;
+    const months: Array<{ label: string; days: number; width: number }> = [];
+    for (let cursor = start; cursor < end; ) {
+      const monthStart = new Date(cursor);
+      const next = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
+      const days = Math.round((next.getTime() - cursor) / DAY);
+      months.push({
+        label: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(monthStart),
+        days,
+        width: (next.getTime() - cursor) / span * 100,
+      });
+      cursor = next.getTime();
+    }
+    return { start, end, span, months };
+  }, [project.due, project.start, rows]);
+
+  const toTimelinePct = (ms: number) =>
+    Number.isFinite(ms)
+      ? Math.min(100, Math.max(0, ((ms - range.start) / range.span) * 100))
+      : 0;
+
   const weekLines: number[] = [];
-  for (let d = 7; d < 92; d += 7) weekLines.push((d / 92) * 100);
+  for (let d = 7 * DAY; d < range.span; d += 7 * DAY) {
+    weekLines.push((d / range.span) * 100);
+  }
 
   const milestones = project.milestones
     .map((m) => ({ ...m, ms: isoToMs(m.date) }))
-    .filter((m) => m.ms >= WINDOW_START && m.ms <= WINDOW_END)
-    .map((m) => ({ ...m, pct: toPct(m.ms) }));
+    .filter((m) => Number.isFinite(m.ms) && m.ms >= range.start && m.ms <= range.end)
+    .map((m) => ({ ...m, pct: toTimelinePct(m.ms) }));
 
-  const todayPct = toPct(todayMs);
+  const todayPct = toTimelinePct(todayMs);
 
   return (
     <Card className="overflow-hidden py-0">
@@ -1453,13 +1501,13 @@ function GanttView({
               Task
             </div>
             <div className="flex flex-1">
-              {GANTT_MONTHS.map((m) => (
+              {range.months.map((m) => (
                 <div
                   key={m.label}
                   className="border-r px-3 py-2.5 text-xs font-medium last:border-r-0"
-                  style={{ width: `${(m.days / 92) * 100}%` }}
+                  style={{ width: `${m.width}%` }}
                 >
-                  {m.label} <span className="text-muted-foreground">2026</span>
+                  {m.label}
                 </div>
               ))}
             </div>
@@ -1533,8 +1581,11 @@ function GanttView({
 
             {/* Rows */}
             {rows.map((t) => {
-              const left = toPct(isoToMs(t.start));
-              const right = toPct(isoToMs(t.due));
+              const taskStart = Number.isFinite(isoToMs(t.start)) ? isoToMs(t.start) : range.start;
+              const taskDueRaw = Number.isFinite(isoToMs(t.due)) ? isoToMs(t.due) : taskStart;
+              const taskDue = Math.max(taskStart, taskDueRaw);
+              const left = toTimelinePct(taskStart);
+              const right = toTimelinePct(taskDue);
               const width = Math.max(right - left, 2.5);
               const progress =
                 t.progressState === "pending_review"
