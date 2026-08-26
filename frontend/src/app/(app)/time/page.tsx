@@ -33,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { appDateKey } from "@/lib/timezone";
 
 type Entry = {
   id: number;
@@ -70,6 +71,9 @@ const formatDate = (date: string) =>
     year: "numeric",
   });
 
+const isWithinDateRange = (date: string, from: string, to: string) =>
+  (!from || date >= from) && (!to || date <= to);
+
 function Stat({
   label,
   value,
@@ -103,14 +107,14 @@ function GeneralTimeDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: (entry: WorkLog) => void;
 }) {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => appDateKey());
   const [hours, setHours] = useState("1");
   const [minutes, setMinutes] = useState("0");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (open) {
-      setDate(new Date().toISOString().slice(0, 10));
+      setDate(appDateKey());
       setHours("1");
       setMinutes("0");
       setNotes("");
@@ -244,7 +248,7 @@ function TaskTimeDialog({
   const [projectId, setProjectId] = useState("");
   const [taskId, setTaskId] = useState("");
   const [entryType, setEntryType] = useState<LogType>("general");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => appDateKey());
   const [hours, setHours] = useState("1");
   const [minutes, setMinutes] = useState("0");
   const [notes, setNotes] = useState("");
@@ -252,7 +256,7 @@ function TaskTimeDialog({
 
   useEffect(() => {
     if (!open) return;
-    setDate(new Date().toISOString().slice(0, 10));
+    setDate(appDateKey());
     setHours("1");
     setMinutes("0");
     setNotes("");
@@ -491,6 +495,8 @@ export default function TimePage() {
   const [recordType, setRecordType] = useState<"all" | LogType>("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [taskFilter, setTaskFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [taskTimeOpen, setTaskTimeOpen] = useState(false);
   useEffect(() => {
     Promise.all([
@@ -522,24 +528,32 @@ export default function TimePage() {
   }, []);
   const projects = useMemo(() => {
     const options = new Map<number, string>();
-    entries.forEach((entry) => options.set(entry.project, entry.project_name));
+    entries
+      .filter((entry) => isWithinDateRange(entry.work_date, dateFrom, dateTo))
+      .forEach((entry) => options.set(entry.project, entry.project_name));
     workLogs.forEach((log) => {
       if (log.project && log.project_name)
         options.set(log.project, log.project_name);
     });
     return Array.from(options.entries());
-  }, [entries, workLogs]);
+  }, [dateFrom, dateTo, entries, workLogs]);
   const tasks = useMemo(() => {
     const source =
       projectFilter === "all"
-        ? entries
+        ? entries.filter((entry) =>
+            isWithinDateRange(entry.work_date, dateFrom, dateTo),
+          )
         : projectFilter === "__none__"
           ? []
-          : entries.filter((entry) => String(entry.project) === projectFilter);
+          : entries.filter(
+              (entry) =>
+                String(entry.project) === projectFilter &&
+                isWithinDateRange(entry.work_date, dateFrom, dateTo),
+            );
     return Array.from(
       new Map(source.map((entry) => [entry.task, entry.task_name])).entries(),
     );
-  }, [entries, projectFilter]);
+  }, [dateFrom, dateTo, entries, projectFilter]);
   const filteredEntries = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return entries.filter((entry) => {
@@ -553,6 +567,7 @@ export default function TimePage() {
         ].some((value) => value.toLowerCase().includes(normalized));
       return (
         matchesQuery &&
+        isWithinDateRange(entry.work_date, dateFrom, dateTo) &&
         (recordType === "all" || recordType === "task") &&
         (projectFilter === "all" ||
           (projectFilter === "__none__"
@@ -564,7 +579,7 @@ export default function TimePage() {
             : String(entry.task) === taskFilter))
       );
     });
-  }, [entries, projectFilter, query, recordType, taskFilter]);
+  }, [dateFrom, dateTo, entries, projectFilter, query, recordType, taskFilter]);
   const filteredLogs = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return workLogs.filter(
@@ -572,6 +587,7 @@ export default function TimePage() {
         (!normalized ||
           log.notes.toLowerCase().includes(normalized) ||
           log.work_date.includes(normalized)) &&
+        isWithinDateRange(log.work_date, dateFrom, dateTo) &&
         (recordType === "all" || recordType === "general") &&
         (projectFilter === "all" ||
           (projectFilter === "__none__"
@@ -579,7 +595,7 @@ export default function TimePage() {
             : String(log.project) === projectFilter)) &&
         (taskFilter === "all" || taskFilter === "__none__"),
     );
-  }, [projectFilter, query, recordType, taskFilter, workLogs]);
+  }, [dateFrom, dateTo, projectFilter, query, recordType, taskFilter, workLogs]);
   const taskMinutes = filteredEntries.reduce(
     (sum, entry) => sum + entry.duration_minutes,
     0,
@@ -598,6 +614,8 @@ export default function TimePage() {
     setRecordType("all");
     setProjectFilter("all");
     setTaskFilter("all");
+    setDateFrom("");
+    setDateTo("");
   }
   return (
     <div className="space-y-6">
@@ -661,6 +679,24 @@ export default function TimePage() {
               <SelectItem value="general">General time</SelectItem>
             </SelectContent>
           </Select>
+          <div className="grid w-full grid-cols-2 gap-2 lg:w-[290px]">
+            <Input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(event) => setDateFrom(event.target.value)}
+              aria-label="From date"
+              title="From date"
+            />
+            <Input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(event) => setDateTo(event.target.value)}
+              aria-label="To date"
+              title="To date"
+            />
+          </div>
           {recordType === "task" && (
             <Select
               value={projectFilter}
@@ -700,7 +736,9 @@ export default function TimePage() {
           {(query ||
             recordType !== "all" ||
             projectFilter !== "all" ||
-            taskFilter !== "all") && (
+            taskFilter !== "all" ||
+            dateFrom ||
+            dateTo) && (
             <Button
               variant="ghost"
               size="icon"
