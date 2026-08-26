@@ -87,6 +87,9 @@ export default function ChatPage() {
   const typingStopTimer = useRef<number | null>(null);
   const remoteTypingStopTimer = useRef<number | null>(null);
   const messageLoadVersion = useRef(0);
+  const messageScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const shouldScrollMessagesRef = useRef(true);
+  const prependScrollRef = useRef<{ height: number; top: number } | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -117,6 +120,15 @@ export default function ChatPage() {
       ),
     [users, userQuery],
   );
+  function messageViewport() {
+    return messageScrollContainerRef.current?.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    ) ?? null;
+  }
+  function isNearMessageBottom() {
+    const viewport = messageViewport();
+    return !viewport || viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 120;
+  }
   const loadConversations = useCallback(async () => {
     const response = await fetch("/api/chat/conversations", {
       cache: "no-store",
@@ -146,9 +158,17 @@ export default function ChatPage() {
       // Do not let an older HTTP response overwrite a message received over
       // WebSocket while that response was in flight.
       if (requestVersion !== messageLoadVersion.current) return;
-      setMessages((current) =>
-        before ? [...page.results, ...current] : page.results,
-      );
+      const viewport = messageViewport();
+      if (before && viewport) {
+        prependScrollRef.current = {
+          height: viewport.scrollHeight,
+          top: viewport.scrollTop,
+        };
+        shouldScrollMessagesRef.current = false;
+      } else {
+        shouldScrollMessagesRef.current = isNearMessageBottom();
+      }
+      setMessages((current) => before ? [...page.results, ...current] : page.results);
       setNextBefore(page.next_before);
     },
     [],
@@ -167,6 +187,21 @@ export default function ChatPage() {
     }, 0);
     return () => window.clearTimeout(id);
   }, [activeId, loadMessages]);
+  useEffect(() => {
+    if (!messages.length) return;
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = messageViewport();
+      if (!viewport) return;
+      if (prependScrollRef.current) {
+        const previous = prependScrollRef.current;
+        viewport.scrollTop = previous.top + (viewport.scrollHeight - previous.height);
+        prependScrollRef.current = null;
+        return;
+      }
+      if (shouldScrollMessagesRef.current) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, activeId]);
   // Safety net for an interrupted websocket: persisted messages are reconciled
   // quickly, so a transient connection issue cannot hide a sent message.
   useEffect(() => {
@@ -250,6 +285,7 @@ export default function ChatPage() {
               ),
           );
           if (data.conversation_id === activeIdRef.current) {
+            shouldScrollMessagesRef.current = isNearMessageBottom();
             messageLoadVersion.current += 1;
             setTyping(false);
             setMessages((items) =>
@@ -619,7 +655,8 @@ export default function ChatPage() {
                   <IconTrash className="size-4" />
                 </Button>
               </div>
-              <ScrollArea className="min-h-0 flex-1 bg-muted/20">
+              <div ref={messageScrollContainerRef} className="min-h-0 flex-1 bg-muted/20">
+              <ScrollArea className="h-full">
                 <div className="flex flex-col gap-3 p-4">
                   {nextBefore && (
                     <Button
@@ -675,6 +712,7 @@ export default function ChatPage() {
                   ))}
                 </div>
               </ScrollArea>
+              </div>
               <div className="shrink-0 border-t bg-card p-3">
                 <div className="flex gap-2">
                   <Input
